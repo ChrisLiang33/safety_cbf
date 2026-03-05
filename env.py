@@ -1,5 +1,4 @@
 # add a energy function to the action 
-# what is the alpha and epsilon changes 
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -21,19 +20,14 @@ class AdaptiveCBFEnv(gym.Env):
         super().__init__()
         self.dt = 0.1
         
-        # ---------------------------------------------------------
         # ACTION SPACE: z = [alpha, epsilon, k_x, k_y] (4 values)
-        # Note: We set the lower bound of epsilon to 0.001 to avoid dividing by zero
-        # ---------------------------------------------------------
         self.action_space = spaces.Box(
             low=np.array([0.1, 0.1, 0.5, -2.0], dtype=np.float32),
             high=np.array([5.0, 50.0, 2.0, 2.0], dtype=np.float32),
             dtype=np.float32
         )
 
-        # ---------------------------------------------------------
         # OBSERVATION SPACE: [robot_x, robot_y, obs_x, obs_y, obs_radius]
-        # ---------------------------------------------------------
         self.observation_space = spaces.Box(
             low=np.array([-10.0, -10.0, -10.0, -10.0, 0.0], dtype=np.float32),
             high=np.array([10.0, 10.0, 10.0, 10.0, 5.0], dtype=np.float32),
@@ -86,11 +80,11 @@ class AdaptiveCBFEnv(gym.Env):
             prob.solve(solver=cp.OSQP, verbose=False)
             safe_u = u.value
             if safe_u is None:
-                safe_u = np.array([0.0, 0.0]) # Fallback if math is infeasible
+                safe_u = np.array([0.0, 0.0])
         except Exception:
-            safe_u = np.array([0.0, 0.0]) # Fallback if solver crashes
-
+            safe_u = np.array([0.0, 0.0])
         safe_u = np.clip(safe_u, -2.0, 2.0)
+
         # 5. Apply physics using the safe, filtered velocity
         self.robot_pos += safe_u * self.dt
         
@@ -119,7 +113,7 @@ class AdaptiveCBFEnv(gym.Env):
             reward += 50.0 # Success bonus for crossing the scene
             terminated = True
 
-        return self._get_obs(), reward, terminated, truncated, {}
+        return self._get_obs(), reward, terminated, truncated, {"safe_u": safe_u, "h_x": new_hx}
 
     def _get_obs(self):
         return np.array([
@@ -128,20 +122,10 @@ class AdaptiveCBFEnv(gym.Env):
             self.obstacle_radius
         ], dtype=np.float32)
 
-
-# ==========================================
-# MAIN EXECUTION SCRIPT
-# ==========================================
-
-# ==========================================
-# MAIN EXECUTION SCRIPT
-# ==========================================
 if __name__ == "__main__":
-    # 1. Setup a log directory to save the training data
     log_dir = "./cbf_logs/"
     os.makedirs(log_dir, exist_ok=True)
 
-    # 2. Check CPU cores and setup Multiprocessing
     total_cores = os.cpu_count()
     print(f"Detected {total_cores} CPU cores on this machine.")
     n_envs = max(1, total_cores - 2) 
@@ -159,30 +143,23 @@ if __name__ == "__main__":
     print("Initializing PPO Agent...")
     model = PPO("MlpPolicy", vec_env, verbose=0, device="cpu")  
 
-    # 3. Train the Agent
     print("Starting training on multiple CPU cores...")
     model.learn(total_timesteps=500000) 
     print("Training finished!")
 
-    # 4. Extract and Plot the Learning Curve
     print("Plotting Learning Curve...")
     dataframes = []
     
-    # Loop through all the core logs and combine them
     for file in os.listdir(log_dir):
         if file.endswith("monitor.csv"):
             df_part = pd.read_csv(os.path.join(log_dir, file), skiprows=1)
             
-            # The 'l' column is the length of the episode. 
-            # cumsum() calculates the exact timestep this episode finished.
             df_part['timestep'] = df_part['l'].cumsum()
             dataframes.append(df_part)
             
     if dataframes:
-        # Combine all the cores into one dataset
         df = pd.concat(dataframes)
         
-        # Sort every episode from all 22 cores chronologically by the new timestep column
         df = df.sort_values(by='timestep').reset_index(drop=True)
         
         plt.figure(figsize=(10, 4))
@@ -202,24 +179,26 @@ if __name__ == "__main__":
     print("Testing the trained model in 3 randomized scenarios...")
     test_env = AdaptiveCBFEnv()
 
-    # Create a new folder to hold your evaluation graphs
     eval_dir = "./eval_plots/"
     os.makedirs(eval_dir, exist_ok=True)
 
-    # Loop 3 times to generate 3 separate test runs
     for episode in range(3):
         obs, info = test_env.reset()
 
-        # OVERRIDE: Randomize the physical geometry of the test
+        # Randomize the physical geometry of the test
         test_env.robot_pos = np.array([np.random.uniform(0.0, 2.0), np.random.uniform(-3.0, 3.0)])
         test_env.obstacle_pos = np.array([np.random.uniform(3.0, 7.0), np.random.uniform(-2.0, 2.0)])
-        
-        # Update the observation array
         obs = test_env._get_obs()
 
-        alphas = []
-        epsilons = []
-        distances = []
+        # Clipboards for our new dashboard
+        alphas, epsilons, distances = [], [], []
+        robot_xs, robot_ys = [], []
+        k_nom_xs, k_nom_ys = [], []
+        u_safe_xs, u_safe_ys = [], []
+        h_xs = []
+
+        obs_x, obs_y = test_env.obstacle_pos[0], test_env.obstacle_pos[1]
+        obs_r = test_env.obstacle_radius
 
         for i in range(150): 
             action, _states = model.predict(obs, deterministic=True)
@@ -227,44 +206,92 @@ if __name__ == "__main__":
             
             alphas.append(alpha)
             epsilons.append(epsilon)
+            k_nom_xs.append(k_x)
+            k_nom_ys.append(k_y)
+            robot_xs.append(obs[0])
+            robot_ys.append(obs[1])
             
-            robot_pos = np.array([obs[0], obs[1]])
-            obs_pos = np.array([obs[2], obs[3]])
-            dist = np.linalg.norm(robot_pos - obs_pos) - obs[4]
+            dist = np.linalg.norm(np.array([obs[0], obs[1]]) - np.array([obs[2], obs[3]])) - obs[4]
             distances.append(dist)
 
             obs, reward, terminated, truncated, info = test_env.step(action)
+            
+            safe_u = info.get("safe_u", np.array([0.0, 0.0]))
+            u_safe_xs.append(safe_u[0])
+            u_safe_ys.append(safe_u[1])
+            h_xs.append(info.get("h_x", 0.0))
             
             if terminated or truncated:
                 print(f"Scenario {episode + 1} finished at step {i+1}!")
                 break
 
-        # 6. Plot and SAVE the Dynamic Parameter Tuning
-        print(f"Saving Scenario {episode + 1} graph...")
+        # 6. PLOT THE 4-PANEL DASHBOARD
+        print(f"Saving Dashboard for Scenario {episode + 1}...")
         steps = range(len(alphas))
         
-        fig, ax1 = plt.subplots(figsize=(10, 5))
+        # Create a massive 2x2 grid for our plots
+        fig, axs = plt.subplots(2, 2, figsize=(16, 10))
+        fig.suptitle(f"Diagnostic Dashboard: Randomized Scenario {episode + 1}", fontsize=16)
 
-        ax1.set_xlabel('Time Step')
-        ax1.set_ylabel('Distance to Obstacle', color='black')
-        ax1.plot(steps, distances, color='black', linestyle='--', label='Distance')
-        ax1.tick_params(axis='y', labelcolor='black')
-        ax1.axhline(0, color='red', linewidth=1, linestyle=':')
+        # --- Panel 1: Top Down Trajectory (Color-Mapped by Alpha) ---
+        ax1 = axs[0, 0]
+        ax1.set_title("Robot Trajectory (Color = Alpha Value)")
+        ax1.set_xlabel("X Position")
+        ax1.set_ylabel("Y Position")
+        
+        # Draw the obstacle
+        circle = plt.Circle((obs_x, obs_y), obs_r, color='red', alpha=0.5, label='Obstacle')
+        ax1.add_patch(circle)
+        
+        # Plot the trajectory with a colormap
+        scatter = ax1.scatter(robot_xs, robot_ys, c=alphas, cmap='coolwarm', s=20, edgecolor='black', linewidth=0.5)
+        fig.colorbar(scatter, ax=ax1, label='Alpha (Aggressiveness)')
+        ax1.plot(robot_xs, robot_ys, color='black', linewidth=0.5, alpha=0.5) # connecting line
+        ax1.set_xlim(-1, 10)
+        ax1.set_ylim(-5, 5)
+        ax1.grid(True)
 
-        ax2 = ax1.twinx()  
-        ax2.set_ylabel('Parameter Value')
-        ax2.plot(steps, alphas, color='blue', label='Alpha (Aggressiveness)')
-        ax2.plot(steps, epsilons, color='orange', label='Epsilon (Tolerance)')
+        # --- Panel 2: Dynamic Parameter Tuning ---
+        ax2_dist = axs[0, 1]
+        ax2_dist.set_title("Parameter Tuning vs. Distance")
+        ax2_dist.set_xlabel('Time Step')
+        ax2_dist.set_ylabel('Distance to Obstacle edge', color='black')
+        ax2_dist.plot(steps, distances, color='black', linestyle='--', label='Distance')
+        ax2_dist.axhline(0, color='red', linewidth=1, linestyle=':')
         
-        plt.title(f"Dynamic Tuning: Randomized Scenario {episode + 1}")
-        fig.legend(loc="upper center", bbox_to_anchor=(0.5, 0.9))
-        plt.grid()
-        
-        # Save the figure to your new folder instead of showing it
-        save_path = os.path.join(eval_dir, f"scenario_{episode + 1}.png")
+        ax2_params = ax2_dist.twinx()
+        ax2_params.set_ylabel('Parameter Value')
+        ax2_params.plot(steps, alphas, color='blue', label='Alpha')
+        ax2_params.plot(steps, epsilons, color='orange', label='Epsilon')
+        ax2_dist.grid(True)
+
+        lines_1, labels_1 = ax2_dist.get_legend_handles_labels()
+        lines_2, labels_2 = ax2_params.get_legend_handles_labels()
+        ax2_params.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper center')
+
+        # --- Panel 3: Nominal vs. Safe Action (X-Axis Velocity) ---
+        ax3 = axs[1, 0]
+        ax3.set_title("Control Input Override: Forward Velocity (X)")
+        ax3.set_xlabel("Time Step")
+        ax3.set_ylabel("Velocity (m/s)")
+        ax3.plot(steps, k_nom_xs, label='Requested Velocity ($k_{nom}$)', color='gray', linestyle='--')
+        ax3.plot(steps, u_safe_xs, label='Safe Velocity ($u_{safe}$)', color='green')
+        ax3.legend()
+        ax3.grid(True)
+
+        # --- Panel 4: The Barrier Function ---
+        ax4 = axs[1, 1]
+        ax4.set_title("Control Barrier Function Value ($h(x)$)")
+        ax4.set_xlabel("Time Step")
+        ax4.set_ylabel("h(x) value")
+        ax4.plot(steps, h_xs, label='Safety Boundary $h(x)$', color='purple')
+        ax4.axhline(0, color='red', linewidth=1, linestyle=':', label='Crash Line ($h(x) = 0$)')
+        ax4.legend()
+        ax4.grid(True)
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        save_path = os.path.join(eval_dir, f"scenario_{episode + 1}_dashboard.png")
         plt.savefig(save_path, bbox_inches='tight')
-        
-        # Close the plot in the background so it doesn't eat up your RAM
         plt.close()
         
-    print(f"All graphs successfully saved to {eval_dir}!")
+    print(f"All dashboards successfully saved to {eval_dir}!")
