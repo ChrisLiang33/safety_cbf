@@ -22,8 +22,8 @@ class AdaptiveCBFEnv(gym.Env):
         
         # ACTION SPACE: z = [alpha, epsilon, k_x, k_y] (4 values)
         self.action_space = spaces.Box(
-            low=np.array([0.1, 0.1, 0.5, -2.0], dtype=np.float32),
-            high=np.array([5.0, 50.0, 2.0, 2.0], dtype=np.float32),
+            low=np.array([1.0, 0.1, 0.0, 0.0], dtype=np.float32),
+            high=np.array([5.0, 50.0, 2.0, 0.0], dtype=np.float32),
             dtype=np.float32
         )
 
@@ -57,6 +57,7 @@ class AdaptiveCBFEnv(gym.Env):
 
         alpha, epsilon, k_x, k_y = action
         k_nom = np.array([k_x, k_y])
+        k_test = [2, 0]
 
         # 2. Calculate State Variables for the CBF
         x_diff = self.robot_pos - self.obstacle_pos
@@ -66,7 +67,13 @@ class AdaptiveCBFEnv(gym.Env):
         L_g_h = 2 * x_diff
         norm_L_g_h_sq = np.sum(L_g_h**2)
         # 4. Set up and solve the Quadratic Program (TISSf-QP)
+        # Define the optimization variable (safe velocity)
         u = cp.Variable(2)
+        
+        # Velocity limits
+        u_min = np.array([-2.0, -2.0]) # Allowed max reverse speed
+        u_max = np.array([2.0, 2.0])
+
         # The Constraint: L_g_h * u >= -alpha * h_x + (||L_g_h||^2 / epsilon)
         A = L_g_h
         b = -alpha * h_x + (norm_L_g_h_sq / epsilon)
@@ -77,8 +84,11 @@ class AdaptiveCBFEnv(gym.Env):
         prob = cp.Problem(cost, constraints)
 
         try:
-            prob.solve(solver=cp.OSQP, verbose=False)
-            safe_u = u.value
+            # prob.solve(solver=cp.OSQP, verbose=False)
+
+            # safe_u = u.value
+            
+            safe_u = k_test
             if safe_u is None:
                 safe_u = np.array([0.0, 0.0])
         except Exception:
@@ -105,12 +115,19 @@ class AdaptiveCBFEnv(gym.Env):
             reward = -100.0 # Crash penalty
             terminated = True
         else:
-            reward = safe_u[0] * self.dt # Reward for moving right
+            reward = safe_u[0] * 5.0 * self.dt # Reward for moving right
             epsilon_pentalty = 0.05 * (1.0 / epsilon)
             reward -= epsilon_pentalty
 
+            if safe_u[0] < 0:
+                reward -= 5.0
+
         if self.robot_pos[0] > 9.0:
             reward += 50.0 # Success bonus for crossing the scene
+            terminated = True
+        
+        if self.robot_pos[0] < -1.0:
+            reward -= 50
             terminated = True
 
         return self._get_obs(), reward, terminated, truncated, {"safe_u": safe_u, "h_x": new_hx}
@@ -249,6 +266,7 @@ if __name__ == "__main__":
         ax1.plot(robot_xs, robot_ys, color='black', linewidth=0.5, alpha=0.5) # connecting line
         ax1.set_xlim(-1, 10)
         ax1.set_ylim(-5, 5)
+        ax1.set_aspect('equal', adjustable='box')
         ax1.grid(True)
 
         # --- Panel 2: Dynamic Parameter Tuning ---
