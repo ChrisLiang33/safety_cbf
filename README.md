@@ -1,7 +1,14 @@
 pip install 'stable-baselines3[extra]'
 
-there were problems with running off the map, currently does not drive forward and curve around he obstacle
-it seems to learn that by keeping the alpa and epsilon low, it could trigger the violent forcefield 
-to bounce the robot safely backward off the map and end the episode without crashing
+the lower the alpha, the more scared the solver panics as it gets closer to the obs, it will try to step in early and interfear with the control. 
 
-alpha was dialed down to the min
+the higher the alpha, leads to high performence dodge. it means the solver is highly aggressive and trust its reaction time, so it  breaks at the last second.
+
+
+random tagret(location, raduis)
+dynamic alpha
+dynamic kx, ky
+
+TODO:
+random obsticle(location, raduis)
+figure out PPO
