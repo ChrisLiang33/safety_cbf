@@ -31,7 +31,6 @@ if __name__ == "__main__":
     print("Initializing PPO Agent...")
     model = PPO("MlpPolicy", vec_env, verbose=1, device="cuda")  
 
-    print("Starting training on multiple CPU cores...")
     model.learn(total_timesteps=1000000) 
     print("Training finished!")
 
@@ -141,4 +140,4 @@ if __name__ == "__main__":
 
     print("Training finished!")
     # ADD THIS LINE:
-    model.save("adaptive_cbf_model")
+    model.save("robust_adaptive_cbf_model")
