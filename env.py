@@ -93,12 +93,9 @@ class AdaptiveCBFEnv(gym.Env):
         u = cp.Variable(2)
         # The Cost: Minimize 0.5 * ||u - k(x)||^2
         cost = cp.Minimize(0.5 * cp.sum_squares(u - k_nom))
-        
 
         constraints = [
-            L_g_h @ u >= -alpha * h_x + (norm_L_g_h_sq / epsilon),
-            u >= np.array([-2.0, -2.0]), 
-            u <= np.array([2.0, 2.0])
+            L_g_h @ u >= -alpha * h_x + (norm_L_g_h_sq / epsilon)
         ]
         
         # constraints = [A @ u >= b]
@@ -134,8 +131,8 @@ class AdaptiveCBFEnv(gym.Env):
             # Penalize the y slightly steering to encourage smooth nominal driving
             reward -= (abs(k_nom[1]) * 0.1) * self.dt
 
-            epsilon_penalty = 5.0 * (1.0/epsilon)
-            reward -= epsilon_penalty
+            # epsilon_penalty = 5.0 * (1.0/epsilon)
+            # reward -= epsilon_penalty
             self.prev_dist2target = dist2target
         
         if dist2target < self.target_radius:

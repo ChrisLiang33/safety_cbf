@@ -1,8 +1,8 @@
 pip install 'stable-baselines3[extra]'
 
-the lower the alpha, the more scared the solver panics as it gets closer to the obs, it will try to step in early and interfear with the control. means more careful it is, when closer to the obs the alpha is lowest
+High α near obstacle = Late reaction = Demands impossible hardware speed = Crash.
 
-the higher the alpha, leads to high performence dodge. it means the solver is highly aggressive and trust its reaction time, so it  breaks at the last second. more recless, so when its far from obs, the alpha is high
+Low α near obstacle = Early reaction = Demands manageable hardware speed = Safe navigation.
 
 when epsilon is big. the term becomes small, it basicly vanishes. because math is forcing a huge buffer zone
 
@@ -57,6 +57,8 @@ dynamic kx, ky
 
 TODO:
 figure out PPO
-fix the train.py file, it has many uselss plots under
+lower the dt
+energy penalty
+
 
 
