@@ -26,7 +26,7 @@ class AdaptiveCBFEnv(gym.Env):
         self.action_space = spaces.Box(
             low=np.array([0.1, 1.0, -2.0, -2.0], dtype=np.float32),
             high=np.array([5.0, 50.0, 2.0, 2.0], dtype=np.float32),
-            dtype=np.float32
+            dtype=np.float32    
         )
 
         # OBSERVATION: [robot_x, robot_y, obs_x, obs_y, obs_radius, target_x, target_y, target_radius]
