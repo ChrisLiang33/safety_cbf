@@ -8,7 +8,7 @@ from env import AdaptiveCBFEnv
 
 if __name__ == "__main__":
     print("Loading Adaptive CBF AI...")
-    model = PPO.load("adaptive_cbf_model") 
+    model = PPO.load("robust_adaptive_cbf_model") 
     env = AdaptiveCBFEnv()
     
     # Define 3 distinct scenarios to prove generalization
@@ -46,6 +46,9 @@ if __name__ == "__main__":
         env.obstacle_pos = scen["obs_pos"]
         env.target_pos = scen["target_pos"]
         env.target_radius = scen["target_radius"]
+        
+        # THE FIX: Recalculate prev_dist2target so the first step's progress reward isn't broken
+        env.prev_dist2target = np.linalg.norm(env.robot_pos - env.target_pos)
         
         # Refresh the observation array with the forced coordinates
         obs = env._get_obs()

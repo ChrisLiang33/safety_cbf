@@ -1,7 +1,6 @@
 pip install 'stable-baselines3[extra]'
 
 High α near obstacle = Late reaction = Demands impossible hardware speed = Crash.
-
 Low α near obstacle = Early reaction = Demands manageable hardware speed = Safe navigation.
 
 when epsilon is big. the term becomes small, it basicly vanishes. because math is forcing a huge buffer zone
@@ -47,16 +46,26 @@ Let's trace the math when the robot is 5 meters away from the obstacle:
 The solver is being told:
 Lg​h⋅u≥−αh(x)+50
 
-Because your robot's hardware can only output a maximum velocity of 2.0 m/s, it is mathematically impossible to satisfy a requirement of +50. The cvxpy solver panics, throws the UserWarning: Solution may be inaccurate you see in the logs, and triggers your fallback code: safe_u = np.array([0.0, 0.0]).
+why always alpha comes down to 0.1
+Why α Flatlines at 0.1 After the Obstacle
 
-implemented features:
-random tagret(location, raduis)
-random obs(location, raduis)
-dynamic alpha
-dynamic kx, ky
+The reason α drops to its absolute minimum bound (which is 0.1 in your action space) and stays there for the rest of the episode comes down to how neural networks handle "useless" variables. This is known as a Zero Gradient state.
+
+Here is exactly what happens mathematically once the robot passes the red circle:
+
+1. The Constraint Deactivates
+Once the robot is driving away from the obstacle, the distance h(x) grows larger. Let's say h(x) is 3.0 meters. The right side of your CBF equation (−αh(x)) becomes a large negative number.
+Simultaneously, because the robot is moving away, the radar gun dot product (Lg​h⋅u) becomes a positive number.
+The solver checks: Positive Number >= Large Negative Number.
+This is trivially true. The constraint is completely inactive, and the CBF goes to sleep.
+
+1. The AI Parks the Variable
+Because the CBF is asleep, changing α from 0.1 to 5.0 has absolutely zero effect on the robot's trajectory. If it doesn't change the trajectory, it doesn't change the reward.
+If a variable doesn't change the reward, the neural network receives no mathematical feedback (a gradient of zero) to adjust it.
+Since the AI was forced to push α down to 0.1 to survive the initial approach, it simply leaves it parked there for the rest of the episode because it has no incentive to spend brainpower raising it back up.
 
 TODO:
-figure out PPO
+PPO
 lower the dt
 energy penalty
 
