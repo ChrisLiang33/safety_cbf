@@ -3,56 +3,16 @@ pip install 'stable-baselines3[extra]'
 High α near obstacle = Late reaction = Demands impossible hardware speed = Crash.
 Low α near obstacle = Early reaction = Demands manageable hardware speed = Safe navigation.
 
-when epsilon is big. the term becomes small, it basicly vanishes. because math is forcing a huge buffer zone
+Alpha is a scaler that determines how fast can the agent approach the boundry, high alpha means we are allowed to approach the 
+boundry at a fast speed which we also mean that we might need to swerve fast last minute to avoid collision, the allowed velocity is high as for a larger time period.  
+a low alpha means we are allowed tp approach the boundry at a slower speed which we try to avoid the last minute collision, the velocity is mostly low for the majority of the time
 
-when its small, it treats the obstcale larger than it is, it will start swerving or braking in advance
+now for a optimal alpha, i expect the alpha to remain the highest it can be while the motor and the solver allows, that way it can keep the tightest pathing to be energy efficient. as to why the alpha comes back down to 0.1, i dont know
 
-problems:
-cvxpy habdles distances flawed, when robot is far away from the obs 5meters away. h_x is a large number 24
-if robot is far way and plugged into the constraint
-lgh * u >= -alpha h_x + lgh(2) / epsilon
+<!-- when epsilon is big. the term becomes small, it basicly vanishes. because math is forcing a huge buffer zone
+when its small, it treats the obstcale larger than it is, it will start swerving or braking in advance -->
 
--alpha h(x) becomes a negative number, but if AI tries to optimize the 1/epsilon penalty, lgh**2/ epsilon explodes into a massive numer
-like 400
-
-then the constraint looks like:
-lgh * u >= -120 + 400
-lgh * u >= 280, this forces the robot to move away at max speed even when its 5 meters away
-
-
-on changing the h(x):
-1. The Safety Boundary (The Zero-Level Set)
-
-    Mathematically, the boundary itself did not change at all. The edge of the red circle is exactly where h(x)=0. Whether you use 52−52=0 or 5−5=0, the physical wall is in the exact same coordinate space.
-
-2. The Gradient (The Repulsion Force)
-This is where everything changed.
-
-    Old (Squared): h(x)=∥x−xobs​∥2−r2. The derivative is 2(x−xobs​). This means the "repulsion" gradient grows linearly the further away the robot gets.
-
-    New (Linear): h(x)=∥x−xobs​∥−r. The derivative is simply ∥x−xobs​∥x−xobs​​. This is a Unit Vector.
-
-probelm:
-Let's trace the math when the robot is 5 meters away from the obstacle:
-
-    The distance vector (x−xobs​) has a length of 5.
-
-    Therefore, Lg​h is a vector with a length of 10.
-
-    This makes ∥Lg​h∥2=100.
-
-    If the AI chooses ϵ=2.0, your robustness margin becomes 2100​=+50.
-
-The solver is being told:
-Lg​h⋅u≥−αh(x)+50
-
-why always alpha comes down to 0.1
-Why α Flatlines at 0.1 After the Obstacle
-
-The reason α drops to its absolute minimum bound (which is 0.1 in your action space) and stays there for the rest of the episode comes down to how neural networks handle "useless" variables. This is known as a Zero Gradient state.
-
-Here is exactly what happens mathematically once the robot passes the red circle:
-
+Q:why always alpha comes down to 0.1
 1. The Constraint Deactivates
 Once the robot is driving away from the obstacle, the distance h(x) grows larger. Let's say h(x) is 3.0 meters. The right side of your CBF equation (−αh(x)) becomes a large negative number.
 Simultaneously, because the robot is moving away, the radar gun dot product (Lg​h⋅u) becomes a positive number.
@@ -65,9 +25,7 @@ If a variable doesn't change the reward, the neural network receives no mathemat
 Since the AI was forced to push α down to 0.1 to survive the initial approach, it simply leaves it parked there for the rest of the episode because it has no incentive to spend brainpower raising it back up.
 
 TODO:
-PPO
-lower the dt
-energy penalty
-
+understand PPO
+fix the training loop of parallenisim problem
 
 

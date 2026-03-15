@@ -9,7 +9,7 @@ class AdaptiveCBFEnv(gym.Env):
     """
     def __init__(self):
         super().__init__()
-        self.dt = 0.1
+        self.dt = 0.05
 
         # ACTION SPACE: [alpha, k_x, k_y]
         # alpha bounds: [0.1, 5.0]
@@ -107,10 +107,6 @@ class AdaptiveCBFEnv(gym.Env):
             reward = progress * 50.0
             # Penalize the y steering slightly to encourage smooth nominal driving
             reward -= (abs(k_nom[1]) * 0.1) * self.dt
-
-            #newww
-            energy_penalty = 0.05 * np.sum(safe_u ** 2)
-            reward -= energy_penalty
 
             self.prev_dist2target = dist2target
         
