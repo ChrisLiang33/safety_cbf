@@ -251,7 +251,9 @@ if __name__ == "__main__":
     print(f"{'-'*95}")
     for row in summary_rows:
         scen_name, method, reward, min_dist, reached, collided, steps = row
-        print(f"{scen_name:<22} {method:<16} {reward:>10.1f} {min_dist:>10.3f} {steps:>8} {'Yes':>9 if reached else 'No':>9} {'YES':>9 if collided else 'No':>9}")
+        reached_str = 'Yes' if reached else 'No'
+        collided_str = 'YES' if collided else 'No'
+        print(f"{scen_name:<22} {method:<16} {reward:>10.1f} {min_dist:>10.3f} {steps:>8} {reached_str:>9} {collided_str:>9}")
 
     # Aggregate
     print(f"\n{'='*95}")
