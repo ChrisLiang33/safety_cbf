@@ -25,7 +25,8 @@ If a variable doesn't change the reward, the neural network receives no mathemat
 Since the AI was forced to push α down to 0.1 to survive the initial approach, it simply leaves it parked there for the rest of the episode because it has no incentive to spend brainpower raising it back up.
 
 TODO:
-understand PPO
 fix the training loop of parallenisim problem
+
+plot it against a fixed alpha value and compare which is better
 
 
