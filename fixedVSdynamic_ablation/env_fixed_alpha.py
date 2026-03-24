@@ -102,6 +102,7 @@ class FixedAlphaCBFEnv(gym.Env):
             progress = self.prev_dist2target - dist2target
             reward = progress * 50.0
             reward -= (abs(k_nom[1]) * 0.1) * self.dt
+            reward -= 0.5  # time penalty: incentivize finishing faster
             self.prev_dist2target = dist2target
 
         if dist2target < self.target_radius:
