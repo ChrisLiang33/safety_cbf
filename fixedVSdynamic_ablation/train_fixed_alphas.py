@@ -7,6 +7,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv
 import os
 import shutil
+import time
 
 from env_fixed_alpha import FixedAlphaCBFEnv
 
@@ -35,11 +36,14 @@ if __name__ == "__main__":
             monitor_dir=log_dir
         )
 
-        model = PPO("MlpPolicy", vec_env, verbose=1, device="cpu")
+        model = PPO("MlpPolicy", vec_env, verbose=1, device="cuda")
+        start = time.time()
         model.learn(total_timesteps=TOTAL_TIMESTEPS)
+        elapsed = time.time() - start
 
         save_path = os.path.join(model_dir, f"fixed_alpha_{alpha}_900k_model")
         model.save(save_path)
         print(f"Saved: {save_path}")
+        print(f"Training time for alpha={alpha}: {elapsed:.1f}s ({elapsed/60:.1f}min)")
 
     print("\nAll fixed-alpha models trained!")

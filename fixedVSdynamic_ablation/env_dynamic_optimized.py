@@ -1,27 +1,30 @@
+"""
+Same as the main AdaptiveCBFEnv but with parametric QP for faster training.
+Only used in the ablation folder — does NOT touch the original env.py.
+"""
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import cvxpy as cp
 
 
-class FixedAlphaCBFEnv(gym.Env):
+class AdaptiveCBFEnvOptimized(gym.Env):
     """
-    Same as AdaptiveCBFEnv but alpha is FIXED (not learned).
-    The RL agent only outputs [k_x, k_y].
+    Custom Environment for tuning CBF parameters on a 2D single integrator.
+    Uses parametric QP to avoid rebuilding the problem every step.
     """
-    def __init__(self, alpha=1.0):
+    def __init__(self):
         super().__init__()
         self.dt = 0.05
-        self.fixed_alpha = alpha
 
-        # ACTION SPACE: [k_x, k_y] only — no alpha
+        # ACTION SPACE: [alpha, k_x, k_y]
         self.action_space = spaces.Box(
-            low=np.array([-2.0, -2.0], dtype=np.float32),
-            high=np.array([2.0, 2.0], dtype=np.float32),
+            low=np.array([0.1, -2.0, -2.0], dtype=np.float32),
+            high=np.array([5.0, 2.0, 2.0], dtype=np.float32),
             dtype=np.float32
         )
 
-        # OBSERVATION: same as AdaptiveCBFEnv
+        # OBSERVATION: [rel_obs_x, rel_obs_y, obs_radius, rel_target_x, rel_target_y, target_radius]
         self.observation_space = spaces.Box(
             low=np.array([-20.0, -20.0, 0.0, -20.0, -20.0, 0.1], dtype=np.float32),
             high=np.array([20.0, 20.0, 5.0, 20.0, 20.0, 3.0], dtype=np.float32),
@@ -62,9 +65,8 @@ class FixedAlphaCBFEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action):
-        k_x, k_y = action
+        alpha, k_x, k_y = action
         k_nom = np.array([k_x, k_y])
-        alpha = self.fixed_alpha
 
         robot_pos_2d = np.array([self.robot_pos[0], self.robot_pos[1]])
         obs_pos_2d = np.array([self.obstacle_pos[0], self.obstacle_pos[1]])
@@ -121,6 +123,10 @@ class FixedAlphaCBFEnv(gym.Env):
         rel_target_y = self.target_pos[1] - self.robot_pos[1]
 
         return np.array([
-            float(rel_obs_x), float(rel_obs_y), float(self.obstacle_radius),
-            float(rel_target_x), float(rel_target_y), float(self.target_radius)
+            float(rel_obs_x),
+            float(rel_obs_y),
+            float(self.obstacle_radius),
+            float(rel_target_x),
+            float(rel_target_y),
+            float(self.target_radius)
         ], dtype=np.float32)
