@@ -7,15 +7,15 @@ from gymnasium import spaces
 import numpy as np
 import cvxpy as cp
 
-
 class AdaptiveCBFEnvOptimized(gym.Env):
     """
     Custom Environment for tuning CBF parameters on a 2D single integrator.
     Uses parametric QP to avoid rebuilding the problem every step.
+    Observation includes velocity so the agent can distinguish approaching vs leaving obstacle.
     """
     def __init__(self):
         super().__init__()
-        self.dt = 0.05
+        self.dt = 0.1
 
         # ACTION SPACE: [alpha, k_x, k_y]
         self.action_space = spaces.Box(
@@ -24,10 +24,10 @@ class AdaptiveCBFEnvOptimized(gym.Env):
             dtype=np.float32
         )
 
-        # OBSERVATION: [rel_obs_x, rel_obs_y, obs_radius, rel_target_x, rel_target_y, target_radius]
+        # OBSERVATION: [rel_obs_x, rel_obs_y, obs_radius, rel_target_x, rel_target_y, target_radius, vel_x, vel_y]
         self.observation_space = spaces.Box(
-            low=np.array([-20.0, -20.0, 0.0, -20.0, -20.0, 0.1], dtype=np.float32),
-            high=np.array([20.0, 20.0, 5.0, 20.0, 20.0, 3.0], dtype=np.float32),
+            low=np.array([-20.0, -20.0, 0.0, -20.0, -20.0, 0.1, -2.0, -2.0], dtype=np.float32),
+            high=np.array([20.0, 20.0, 5.0, 20.0, 20.0, 3.0, 2.0, 2.0], dtype=np.float32),
             dtype=np.float32
         )
 
@@ -37,6 +37,7 @@ class AdaptiveCBFEnvOptimized(gym.Env):
         self.robot_pos = np.zeros(2)
         self.obstacle_pos = np.zeros(2)
         self.obstacle_radius = 1.0
+        self.velocity = np.zeros(2)
 
         # Pre-build parametric QP (avoids reconstruction every step)
         self._u = cp.Variable(2)
@@ -51,6 +52,7 @@ class AdaptiveCBFEnvOptimized(gym.Env):
         super().reset(seed=seed)
 
         self.robot_pos = np.array([0.0, 0.0])
+        self.velocity = np.zeros(2)
 
         self.obstacle_pos = np.array([
             self.np_random.uniform(2.0, 8.0),
@@ -89,6 +91,7 @@ class AdaptiveCBFEnvOptimized(gym.Env):
 
         safe_u = np.clip(safe_u, -2.0, 2.0)
         self.robot_pos += safe_u * self.dt
+        self.velocity = safe_u.copy()
 
         new_robot_pos_2d = np.array([self.robot_pos[0], self.robot_pos[1]])
         dist2obstacle = np.linalg.norm(new_robot_pos_2d - obs_pos_2d) - self.obstacle_radius
@@ -129,5 +132,7 @@ class AdaptiveCBFEnvOptimized(gym.Env):
             float(self.obstacle_radius),
             float(rel_target_x),
             float(rel_target_y),
-            float(self.target_radius)
+            float(self.target_radius),
+            float(self.velocity[0]),
+            float(self.velocity[1]),
         ], dtype=np.float32)

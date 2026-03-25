@@ -8,10 +8,11 @@ class FixedAlphaCBFEnv(gym.Env):
     """
     Same as AdaptiveCBFEnv but alpha is FIXED (not learned).
     The RL agent only outputs [k_x, k_y].
+    Observation includes velocity so the agent can distinguish approaching vs leaving obstacle.
     """
     def __init__(self, alpha=1.0):
         super().__init__()
-        self.dt = 0.05
+        self.dt = 0.1
         self.fixed_alpha = alpha
 
         # ACTION SPACE: [k_x, k_y] only — no alpha
@@ -21,10 +22,10 @@ class FixedAlphaCBFEnv(gym.Env):
             dtype=np.float32
         )
 
-        # OBSERVATION: same as AdaptiveCBFEnv
+        # OBSERVATION: [rel_obs_x, rel_obs_y, obs_radius, rel_target_x, rel_target_y, target_radius, vel_x, vel_y]
         self.observation_space = spaces.Box(
-            low=np.array([-20.0, -20.0, 0.0, -20.0, -20.0, 0.1], dtype=np.float32),
-            high=np.array([20.0, 20.0, 5.0, 20.0, 20.0, 3.0], dtype=np.float32),
+            low=np.array([-20.0, -20.0, 0.0, -20.0, -20.0, 0.1, -2.0, -2.0], dtype=np.float32),
+            high=np.array([20.0, 20.0, 5.0, 20.0, 20.0, 3.0, 2.0, 2.0], dtype=np.float32),
             dtype=np.float32
         )
 
@@ -34,6 +35,7 @@ class FixedAlphaCBFEnv(gym.Env):
         self.robot_pos = np.zeros(2)
         self.obstacle_pos = np.zeros(2)
         self.obstacle_radius = 1.0
+        self.velocity = np.zeros(2)
 
         # Pre-build parametric QP (avoids reconstruction every step)
         self._u = cp.Variable(2)
@@ -48,6 +50,7 @@ class FixedAlphaCBFEnv(gym.Env):
         super().reset(seed=seed)
 
         self.robot_pos = np.array([0.0, 0.0])
+        self.velocity = np.zeros(2)
 
         self.obstacle_pos = np.array([
             self.np_random.uniform(2.0, 8.0),
@@ -87,6 +90,7 @@ class FixedAlphaCBFEnv(gym.Env):
 
         safe_u = np.clip(safe_u, -2.0, 2.0)
         self.robot_pos += safe_u * self.dt
+        self.velocity = safe_u.copy()
 
         new_robot_pos_2d = np.array([self.robot_pos[0], self.robot_pos[1]])
         dist2obstacle = np.linalg.norm(new_robot_pos_2d - obs_pos_2d) - self.obstacle_radius
@@ -123,5 +127,6 @@ class FixedAlphaCBFEnv(gym.Env):
 
         return np.array([
             float(rel_obs_x), float(rel_obs_y), float(self.obstacle_radius),
-            float(rel_target_x), float(rel_target_y), float(self.target_radius)
+            float(rel_target_x), float(rel_target_y), float(self.target_radius),
+            float(self.velocity[0]), float(self.velocity[1]),
         ], dtype=np.float32)
