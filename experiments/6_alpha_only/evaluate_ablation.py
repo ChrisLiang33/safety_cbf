@@ -3,10 +3,8 @@ Alpha-only ablation: fixed alpha (deterministic) vs learned alpha.
 Fixed alpha baselines need NO training — k_nom and alpha are both fixed.
 
 Outputs:
-  plots/1_trajectories.png
-  plots/2_cbf_intervention.png
+  plots/combined_scenarios.png  (trajectory + CBF + alpha side by side)
   plots/3_aggregate_metrics.png
-  plots/4_alpha_adaptation.png
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -195,15 +193,17 @@ if __name__ == "__main__":
         all_scenarios.append({"scen": scen, "dyn": dyn, "fixed": fixed_results})
 
     # =====================================================================
-    # PLOT 1: Trajectories
+    # COMBINED PLOT: Trajectory | CBF Intervention | Alpha — side by side
     # =====================================================================
-    fig, axs = plt.subplots(len(SCENARIOS), 1, figsize=(12, 5 * len(SCENARIOS)))
-    fig.suptitle(r"Alpha-Only Control: Fixed $\alpha$ vs Dynamic $\alpha$", fontsize=16, y=1.01)
+    n_scen = len(SCENARIOS)
+    fig, axs = plt.subplots(n_scen, 3, figsize=(24, 5 * n_scen))
+    fig.suptitle(r"Alpha-Only Control: Fixed $\alpha$ vs Dynamic $\alpha$", fontsize=18, y=1.005)
 
     for i, data in enumerate(all_scenarios):
         scen, dyn, fixed_results = data["scen"], data["dyn"], data["fixed"]
-        ax = axs[i]
 
+        # --- Column 1: Trajectory ---
+        ax = axs[i, 0]
         ax.add_patch(plt.Circle(scen["obs"], 1.0, color="red", alpha=0.3))
         ax.add_patch(plt.Circle(scen["target_pos"], scen["target_radius"], color="green", alpha=0.3))
 
@@ -228,54 +228,29 @@ if __name__ == "__main__":
         if i == 0:
             ax.legend(loc="upper left", fontsize=7)
 
-    fig.tight_layout()
-    fig.savefig(os.path.join(save_dir, "1_trajectories.png"), bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print("Saved: plots/1_trajectories.png")
-
-    # =====================================================================
-    # PLOT 2: CBF intervention
-    # =====================================================================
-    fig, axs = plt.subplots(len(SCENARIOS), 1, figsize=(10, 4 * len(SCENARIOS)))
-    fig.suptitle(r"CBF Intervention: $\|k_{nom} - u_{safe}\|$ Over Time", fontsize=16, y=1.01)
-
-    for i, data in enumerate(all_scenarios):
-        scen, dyn, fixed_results = data["scen"], data["dyn"], data["fixed"]
-        ax = axs[i]
+        # --- Column 2: CBF Intervention ---
+        ax = axs[i, 1]
         for fa in FIXED_ALPHAS:
             r = fixed_results[fa]
             ax.plot(r["cbf_interventions"], color=FIXED_ALPHA_COLORS[fa],
                     linewidth=1.2, linestyle="--", alpha=0.6, label=rf"Fixed $\alpha$={fa}")
         ax.plot(dyn["cbf_interventions"], color=DYNAMIC_COLOR, linewidth=2, label=r"Dynamic $\alpha$")
-        ax.set_title(scen["name"], fontsize=11)
+        ax.set_title(f"{scen['name']} — CBF Intervention", fontsize=11)
         ax.set_xlabel("Time Step")
         ax.set_ylabel(r"$\|k_{nom} - u_{safe}\|$")
         ax.grid(True, alpha=0.3)
         if i == 0:
             ax.legend(loc="upper right", fontsize=7)
 
-    fig.tight_layout()
-    fig.savefig(os.path.join(save_dir, "2_cbf_intervention.png"), bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print("Saved: plots/2_cbf_intervention.png")
-
-    # =====================================================================
-    # PLOT 4: Alpha adaptation
-    # =====================================================================
-    fig, axs = plt.subplots(len(SCENARIOS), 1, figsize=(10, 4 * len(SCENARIOS)))
-    fig.suptitle(r"Dynamic $\alpha$ Adaptation (Alpha-Only Control)", fontsize=16, y=1.01)
-
-    for i, data in enumerate(all_scenarios):
-        scen, dyn = data["scen"], data["dyn"]
-        ax = axs[i]
-
+        # --- Column 3: Alpha Adaptation ---
+        ax = axs[i, 2]
         ax.set_ylabel(r"$\alpha$ Value", color="purple")
         ax.plot(dyn["alphas"], color="purple", linewidth=2, label=r"$\alpha$")
         ax.tick_params(axis="y", labelcolor="purple")
         ax.set_ylim(0, 5.5)
 
         ax_dist = ax.twinx()
-        ax_dist.set_ylabel("Distance to Obstacle (m)", color="darkorange")
+        ax_dist.set_ylabel("Dist to Obstacle (m)", color="darkorange")
         ax_dist.plot(dyn["dist"], color="darkorange", linewidth=1.5, linestyle="-.", label="Dist Obs")
         ax_dist.tick_params(axis="y", labelcolor="darkorange")
         ax_dist.axhline(0, color="red", linewidth=1, linestyle=":", alpha=0.5)
@@ -283,7 +258,7 @@ if __name__ == "__main__":
         for fa in FIXED_ALPHAS:
             ax.axhline(fa, color=FIXED_ALPHA_COLORS[fa], linewidth=1, linestyle=":", alpha=0.4)
 
-        ax.set_title(scen["name"], fontsize=11)
+        ax.set_title(f"{scen['name']} — Alpha Adaptation", fontsize=11)
         ax.set_xlabel("Time Step")
         ax.grid(True, alpha=0.3)
 
@@ -293,9 +268,9 @@ if __name__ == "__main__":
             ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
 
     fig.tight_layout()
-    fig.savefig(os.path.join(save_dir, "4_alpha_adaptation.png"), bbox_inches="tight", dpi=150)
+    fig.savefig(os.path.join(save_dir, "combined_scenarios.png"), bbox_inches="tight", dpi=150)
     plt.close(fig)
-    print("Saved: plots/4_alpha_adaptation.png")
+    print("Saved: plots/combined_scenarios.png")
 
     # =====================================================================
     # BATCH: 100 random scenarios
