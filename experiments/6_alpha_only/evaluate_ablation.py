@@ -89,6 +89,10 @@ def run_dynamic_episode(env, model, scen):
             traj_x.append(env.robot_pos[0])
             traj_y.append(env.robot_pos[1])
             break
+    else:
+        # Loop completed without break — append final position
+        traj_x.append(env.robot_pos[0])
+        traj_y.append(env.robot_pos[1])
 
     reached = np.linalg.norm(env.robot_pos - env.target_pos) < env.target_radius
     collided = min(dist_list) < 0
