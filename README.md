@@ -1,26 +1,35 @@
 pip install 'stable-baselines3[extra]'
 
-High α near obstacle = Late reaction = Demands impossible hardware speed = Crash.
-Low α near obstacle = Early reaction = Demands manageable hardware speed = Safe navigation.
+# Safety CBF — Dynamic Alpha for Robot Navigation
 
-Alpha is a scaler that determines how fast can the agent approach the boundry, high alpha means we are allowed to approach the boundry at a fast speed which we also mean that we might need to swerve fast last minute to avoid collision, the allowed velocity is high as for a larger time period.  
-a low alpha means we are allowed tp approach the boundry at a slower speed which we try to avoid the last minute collision, the velocity is mostly low for the majority of the time
+## Project Structure
 
-now for a optimal alpha, i expect the alpha to remain the highest it can be while the motor and the solver allows, that way it can keep the tightest pathing to be energy efficient. as to why the alpha comes back down to 0.1, i dont know
+```
+experiments/
+├── 1_baseline_single_obstacle/      # Baseline: 1 obs, no alpha reward
+├── 2_multi_obstacle/                # 2 obs, no alpha reward
+├── 3_multi_obstacle_alpha_reward/   # 2 obs + reward += 0.3 * alpha
+├── 4_single_obstacle_alpha_reward/  # 1 obs + reward += 0.3 * alpha
+└── 5_cbf_penalty/                   # 2 obs + reward -= ||safe_u - k_nom||
+legacy/                              # Old standalone scripts & artifacts
+```
 
-<!-- when epsilon is big. the term becomes small, it basicly vanishes. because math is forcing a huge buffer zone
-when its small, it treats the obstcale larger than it is, it will start swerving or braking in advance -->
+## How to run an experiment
+```bash
+cd experiments/5_cbf_penalty
+python run_all.py
+```
 
-Q:why always alpha comes down to 0.1
-1. The Constraint Deactivates
-Once the robot is driving away from the obstacle, the distance h(x) grows larger. Let's say h(x) is 3.0 meters. The right side of your CBF equation (−αh(x)) becomes a large negative number.
-Simultaneously, because the robot is moving away, the radar gun dot product (Lg​h⋅u) becomes a positive number.
-The solver checks: Positive Number >= Large Negative Number.
-This is trivially true. The constraint is completely inactive, and the CBF goes to sleep.
+## Key Concepts
 
-1. The AI Parks the Variable
-Because the CBF is asleep, changing α from 0.1 to 5.0 has absolutely zero effect on the robot's trajectory. If it doesn't change the trajectory, it doesn't change the reward.
-If a variable doesn't change the reward, the neural network receives no mathematical feedback (a gradient of zero) to adjust it.
-Since the AI was forced to push α down to 0.1 to survive the initial approach, it simply leaves it parked there for the rest of the episode because it has no incentive to spend brainpower raising it back up.
+**CBF constraint:** `L_g_h @ u >= -alpha * h(x)`
 
+- **High alpha** near obstacle = loose constraint = CBF barely intervenes = tight path
+- **Low alpha** near obstacle = tight constraint = CBF steers away = wide detour
+- **Ideal dynamic alpha:** high when safe (efficient), low near obstacles (safe), recovers after passing
 
+**Alpha decay problem:** Alpha drops near obstacles but never recovers — because when far from obstacles, the CBF constraint is trivially satisfied regardless of alpha (no learning signal).
+
+**Experiments test different fixes:**
+- Alpha reward bonus (exp 3, 4): `reward += 0.3 * alpha` — works but feels artificial
+- CBF intervention penalty (exp 5): `reward -= ||safe_u - k_nom||` — penalizes unnecessary safety corrections

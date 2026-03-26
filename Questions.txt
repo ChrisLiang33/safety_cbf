@@ -1,0 +1,10 @@
+h = 50
+higher alpha means pretty much all speed is cool, lgh @ u >= -250, alpha=5
+lower alpha means smaller set of speed is allowed, lgh @ u >= -5, alpha=0.1
+
+h = 5
+higher alpha means pretty much all speed is cool, lgh @ u >= -25, alpha=5
+lower alpha means smaller set of speed is allowed, lgh @ u >= -0.5, alpha=0.1
+
+
+is there a way to learn a optimal alpha so the CBF never has to step in? we can penalize the CBF intervention magnitude. 
