@@ -20,3 +20,28 @@ High alpha → direct path → +small progress reward, but risk of collision (-1
 Low alpha → CBF pushes wider → -small progress cost, but guaranteed safe
 The -100 collision penalty is catastrophic compared to the marginal progress benefit. PPO becomes risk-averse and favors low alpha.
 
+                                    
+issues:
+different steps taken but all same reward(progress toward distance reward vs timestep penalty)
+
+potential fix:
+add orientation
+
+
+TODO:
+1.optimize training cycles
+1.overleaf add RL implemtation
+1.moving OBS
+
+2.disturbance in robot dynamics(can be sampled from a uniform ditribution)
+2.add the term phi(adjust safety filter): Add the robustifying term phi * ||Lgh||^2 instead of ||Lgh||^2/epsilon.it should learn to decrease the alpha value and increase the phi value near the obstacles to increase robustness to the uncert>
+This should fix most of the numerical instability that you were seeing with epsilon. It makes the action space a lot easier to deal with
+
+3.It'd be great if we could switch to a general signed distance function for the map. For a description of this take a look at Section IV of this paper: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=11247065. We can definitely use t>
+
+4.Once (2 and 3) are working we can add (a,c) as action parameters (see the overleaf for the exact description of those parameters).
+Next we want to add uncertainty, context, and potentially dynamics to the environment (but we can get here later! It's many steps down the line)
+
+THINK ABOUT:
+isnt fixed OBS and dont know size and shape and number as a priori
+what types of experiment to see

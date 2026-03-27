@@ -1,8 +1,9 @@
 """
-3-obstacle weave ablation: dynamic [kx,ky,alpha] vs fixed alpha + proportional k_nom.
+Phi-CBF + Disturbance ablation: dynamic [kx,ky,alpha,phi] (trained with noise)
+vs fixed alpha + proportional k_nom (both evaluated with noise).
 
 Outputs:
-  plots/combined_scenarios.png  (trajectory | speed | alpha+dist  side by side)
+  plots/combined_scenarios.png  (6-col: traj | speed | alpha+dist | phi+dist | speed+alpha+phi | policy map)
   plots/aggregate_metrics.png
 """
 import numpy as np
@@ -10,8 +11,8 @@ import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import ThreeObsWeaveDynamicEnv
-from env_fixed_alpha import FixedAlphaThreeObsEnv
+from env_dynamic import PhiCBFDisturbanceDynamicEnv
+from env_fixed_alpha import FixedAlphaDisturbanceEnv
 
 # --- CONFIG ---
 DYNAMIC_MODEL_PATH = "./models_dynamic/dynamic_2000k_model"
@@ -22,8 +23,8 @@ DYNAMIC_COLOR = "black"
 MAX_STEPS = 600
 N_RANDOM_SCENARIOS = 100
 OBS_RADIUS = 5.0
+EVAL_NOISE = 0.05
 
-# Hand-picked scenarios: 3 obstacles in slalom pattern
 SCENARIOS = [
     {"name": "Standard Slalom",
      "obs": [np.array([30.0, 6.0]), np.array([50.0, -6.0]), np.array([70.0, 6.0])],
@@ -73,12 +74,13 @@ def path_length(traj_x, traj_y):
 
 def run_dynamic_episode(env, model, scen):
     obs = setup_scenario(env, scen)
-    traj_x, traj_y, alphas, speeds = [], [], [], []
+    env.disturbance_scale = EVAL_NOISE
+    traj_x, traj_y, alphas, phis, speeds = [], [], [], [], []
     k_nom_speeds, safe_u_speeds = [], []
     dist_list = []
-    per_obs_dists = [[], [], []]  # per-obstacle distance over time
-    h_vals_list = [[], [], []]    # barrier function h(x) per obstacle
-    alpha_h_list = [[], [], []]   # alpha * h(x) per obstacle
+    per_obs_dists = [[], [], []]
+    h_vals_list = [[], [], []]
+    alpha_h_list = [[], [], []]
     total_reward = 0.0
 
     for step in range(MAX_STEPS):
@@ -95,9 +97,10 @@ def run_dynamic_episode(env, model, scen):
 
         action, _ = model.predict(obs, deterministic=True)
         alpha_val = float(action[2])
+        phi_val = float(action[3])
         alphas.append(alpha_val)
+        phis.append(phi_val)
 
-        # Record alpha * h for each obstacle (computed with this step's alpha)
         for oi in range(3):
             alpha_h_list[oi].append(alpha_val * h_vals_list[oi][-1])
 
@@ -124,7 +127,7 @@ def run_dynamic_episode(env, model, scen):
     efficiency = plen / straight_line if straight_line > 0 else 1.0
 
     return {
-        "traj_x": traj_x, "traj_y": traj_y, "alphas": alphas,
+        "traj_x": traj_x, "traj_y": traj_y, "alphas": alphas, "phis": phis,
         "speeds": speeds, "k_nom_speeds": k_nom_speeds,
         "safe_u_speeds": safe_u_speeds, "dist": dist_list,
         "per_obs_dists": per_obs_dists,
@@ -214,13 +217,13 @@ if __name__ == "__main__":
     save_dir = "./plots/"
     os.makedirs(save_dir, exist_ok=True)
 
-    print("Loading 3-obstacle weave model...")
-    dyn_env = ThreeObsWeaveDynamicEnv()
+    print(f"Loading phi-CBF+disturbance model... (eval noise={EVAL_NOISE})")
+    dyn_env = PhiCBFDisturbanceDynamicEnv()
     dyn_model = PPO.load(DYNAMIC_MODEL_PATH)
 
     fixed_envs = {}
     for alpha in FIXED_ALPHAS:
-        fixed_envs[alpha] = FixedAlphaThreeObsEnv(alpha=alpha)
+        fixed_envs[alpha] = FixedAlphaDisturbanceEnv(alpha=alpha, disturbance_scale=EVAL_NOISE)
 
     # --- Hand-picked scenarios ---
     print(f"\nRunning {len(SCENARIOS)} hand-picked scenarios...")
@@ -233,13 +236,15 @@ if __name__ == "__main__":
         all_scenarios.append({"scen": scen, "dyn": dyn, "fixed": fixed_results})
 
     # =====================================================================
-    # COMBINED PLOT: Traj | Speed | Alpha+Dist | Speed+Alpha | α vs Dist | h(x) & αh(x)
+    # COMBINED PLOT: 6 columns
     # =====================================================================
-    TIME_MARKER_INTERVAL = 50  # mark every N timesteps on trajectory
+    TIME_MARKER_INTERVAL = 50
+    OBS_COLORS = ["#e74c3c", "#e67e22", "#9b59b6"]
+    OBS_LABELS = ["Obs 1", "Obs 2", "Obs 3"]
     n_scen = len(SCENARIOS)
-    fig, axs = plt.subplots(n_scen, 5, figsize=(48, 7 * n_scen),
-                            gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1]})
-    fig.suptitle(r"3-Obstacle Weave (100m): Dynamic [kx,ky,$\alpha$] vs Fixed $\alpha$ + Prop. Control",
+    fig, axs = plt.subplots(n_scen, 6, figsize=(56, 7 * n_scen),
+                            gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
+    fig.suptitle(rf"Phi-CBF + Disturbance (noise={EVAL_NOISE}): Dynamic [kx,ky,$\alpha$,$\varphi$] vs Fixed $\alpha$",
                  fontsize=18, y=1.005)
 
     for i, data in enumerate(all_scenarios):
@@ -258,7 +263,6 @@ if __name__ == "__main__":
                     linewidth=1.5, linestyle="--", alpha=0.6, label=rf"$\alpha$={fa}")
 
         dyn_x, dyn_y = dyn["traj_x"], dyn["traj_y"]
-        # Plot every 2nd point for dotted trajectory
         step_skip = 2
         sc = ax.scatter(dyn_x[:-1:step_skip], dyn_y[:-1:step_skip],
                         c=dyn["alphas"][::step_skip], cmap="coolwarm",
@@ -266,7 +270,6 @@ if __name__ == "__main__":
         cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
         cbar.set_label(r"$\alpha$")
 
-        # Timestep markers on dynamic trajectory
         for t in range(0, len(dyn_x) - 1, TIME_MARKER_INTERVAL):
             ax.plot(dyn_x[t], dyn_y[t], marker='s', color='black', markersize=4, zorder=6)
             ax.text(dyn_x[t], dyn_y[t] + 0.8, f"t={t}", fontsize=7, color='black',
@@ -282,7 +285,6 @@ if __name__ == "__main__":
         if i == 0:
             ax.legend(loc="upper left", fontsize=7)
 
-        # Metrics text box (below trajectory)
         metrics_lines = []
         metrics_lines.append(f"{'Method':<10} {'Steps':>5} {'Reward':>7}")
         metrics_lines.append("-" * 25)
@@ -295,7 +297,7 @@ if __name__ == "__main__":
                 verticalalignment='top', fontfamily='monospace',
                 bbox=dict(boxstyle='round,pad=0.4', facecolor='lightyellow', alpha=0.9))
 
-        # --- Column 2: Robot Speed over time ---
+        # --- Column 2: Speed ---
         ax = axs[i, 1]
         for fa in FIXED_ALPHAS:
             r = fixed_results[fa]
@@ -312,9 +314,6 @@ if __name__ == "__main__":
             ax.legend(loc="upper right", fontsize=7)
 
         # --- Column 3: Alpha + Per-Obstacle Distance ---
-        OBS_COLORS = ["#e74c3c", "#e67e22", "#9b59b6"]  # red, orange, purple for obs 1,2,3
-        OBS_LABELS = ["Obs 1", "Obs 2", "Obs 3"]
-
         ax = axs[i, 2]
         ax.set_ylabel(r"$\alpha$ Value", color="purple")
         ax.plot(dyn["alphas"], color="purple", linewidth=2.5, label=r"$\alpha$", zorder=5)
@@ -326,88 +325,114 @@ if __name__ == "__main__":
         ax_dist.tick_params(axis="y", labelcolor="gray")
         ax_dist.axhline(0, color="red", linewidth=1, linestyle=":", alpha=0.5)
 
-        # Plot per-obstacle distances and mark closest approach
         for oi in range(3):
             d = dyn["per_obs_dists"][oi]
             ax_dist.plot(d, color=OBS_COLORS[oi], linewidth=1.2, linestyle="-.",
                          alpha=0.7, label=OBS_LABELS[oi])
-            # Vertical line at closest approach
             t_min = int(np.argmin(d))
-            ax.axvline(t_min, color=OBS_COLORS[oi], linewidth=1.5, linestyle="--",
-                        alpha=0.6)
+            ax.axvline(t_min, color=OBS_COLORS[oi], linewidth=1.5, linestyle="--", alpha=0.6)
             ax.text(t_min, 5.3, f"{OBS_LABELS[oi]}\nt={t_min}", fontsize=6,
                     color=OBS_COLORS[oi], ha="center", va="top", fontweight="bold")
-            # Light shaded band around encounter (dist < 10)
             in_zone = np.array(d) < 10.0
             for t_idx in range(len(d)):
                 if in_zone[t_idx]:
                     ax.axvspan(t_idx, t_idx + 1, color=OBS_COLORS[oi], alpha=0.04)
 
         for fa in FIXED_ALPHAS:
-            ax.axhline(fa, color=FIXED_ALPHA_COLORS[fa], linewidth=1,
-                        linestyle=":", alpha=0.4)
+            ax.axhline(fa, color=FIXED_ALPHA_COLORS[fa], linewidth=1, linestyle=":", alpha=0.4)
 
         ax.set_title(f"{scen['name']} — Alpha vs Obstacle Proximity", fontsize=11)
         ax.set_xlabel("Time Step")
         ax.grid(True, alpha=0.3)
-
         if i == 0:
             lines1, labels1 = ax.get_legend_handles_labels()
             lines2, labels2 = ax_dist.get_legend_handles_labels()
             ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
 
-        # --- Column 4: Speed + Alpha overlay (dynamic only) ---
+        # --- Column 4: Phi + Per-Obstacle Distance ---
         ax = axs[i, 3]
+        ax.set_ylabel(r"$\varphi$ Value", color="darkorange")
+        ax.plot(dyn["phis"], color="darkorange", linewidth=2.5, label=r"$\varphi$", zorder=5)
+        ax.tick_params(axis="y", labelcolor="darkorange")
+        ax.set_ylim(-0.7, 2.3)
+        ax.axhline(0, color="gray", linewidth=0.8, linestyle=":", alpha=0.4)
+
+        ax_dist2 = ax.twinx()
+        ax_dist2.set_ylabel("Dist to Obs (m)", color="gray")
+        ax_dist2.tick_params(axis="y", labelcolor="gray")
+        ax_dist2.axhline(0, color="red", linewidth=1, linestyle=":", alpha=0.5)
+
+        for oi in range(3):
+            d = dyn["per_obs_dists"][oi]
+            ax_dist2.plot(d, color=OBS_COLORS[oi], linewidth=1.2, linestyle="-.",
+                          alpha=0.7, label=OBS_LABELS[oi])
+            t_min = int(np.argmin(d))
+            ax.axvline(t_min, color=OBS_COLORS[oi], linewidth=1.5, linestyle="--", alpha=0.6)
+            ax.text(t_min, 2.1, f"{OBS_LABELS[oi]}\nt={t_min}", fontsize=6,
+                    color=OBS_COLORS[oi], ha="center", va="top", fontweight="bold")
+            in_zone = np.array(d) < 10.0
+            for t_idx in range(len(d)):
+                if in_zone[t_idx]:
+                    ax.axvspan(t_idx, t_idx + 1, color=OBS_COLORS[oi], alpha=0.04)
+
+        ax.set_title(f"{scen['name']} — Phi vs Obstacle Proximity", fontsize=11)
+        ax.set_xlabel("Time Step")
+        ax.grid(True, alpha=0.3)
+        if i == 0:
+            lines1, labels1 = ax.get_legend_handles_labels()
+            lines2, labels2 = ax_dist2.get_legend_handles_labels()
+            ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
+
+        # --- Column 5: Speed + Alpha + Phi overlay ---
+        ax = axs[i, 4]
         ax.set_ylabel("Speed (m/s)", color="teal")
-        ax.plot(dyn["safe_u_speeds"], color="teal", linewidth=2, label=r"$\|u_{safe}\|$ (actual)")
+        ax.plot(dyn["safe_u_speeds"], color="teal", linewidth=2, label=r"$\|u_{safe}\|$")
         ax.plot(dyn["k_nom_speeds"], color="teal", linewidth=1, linestyle=":",
-                alpha=0.5, label=r"$\|k_{nom}\|$ (requested)")
+                alpha=0.5, label=r"$\|k_{nom}\|$")
         ax.axhline(3.0, color="gray", linewidth=0.8, linestyle=":", alpha=0.3)
         ax.tick_params(axis="y", labelcolor="teal")
         ax.set_ylim(-0.1, 5.0)
 
-        ax_alpha = ax.twinx()
-        ax_alpha.set_ylabel(r"$\alpha$ Value", color="purple")
-        ax_alpha.plot(dyn["alphas"], color="purple", linewidth=1.5, linestyle="--",
-                      alpha=0.7, label=r"$\alpha$")
-        ax_alpha.tick_params(axis="y", labelcolor="purple")
-        ax_alpha.set_ylim(0, 5.5)
+        ax_ap = ax.twinx()
+        ax_ap.set_ylabel(r"$\alpha$ / $\varphi$")
+        ax_ap.plot(dyn["alphas"], color="purple", linewidth=1.5, linestyle="--",
+                   alpha=0.7, label=r"$\alpha$")
+        ax_ap.plot(dyn["phis"], color="darkorange", linewidth=1.5, linestyle="-.",
+                   alpha=0.7, label=r"$\varphi$")
+        ax_ap.set_ylim(-1, 5.5)
 
-        # Shade obstacle encounter zones (where min dist < 10)
         for t_idx in range(len(dyn["dist"])):
             if dyn["dist"][t_idx] < 8.0:
                 ax.axvspan(t_idx, t_idx + 1, color="red", alpha=0.05)
 
-        ax.set_title(f"{scen['name']} — Speed + Alpha (post-OBS verification)", fontsize=11)
+        ax.set_title(f"{scen['name']} — Speed + Alpha + Phi", fontsize=11)
         ax.set_xlabel("Time Step")
         ax.grid(True, alpha=0.3)
-
         if i == 0:
             lines1, labels1 = ax.get_legend_handles_labels()
-            lines2, labels2 = ax_alpha.get_legend_handles_labels()
+            lines2, labels2 = ax_ap.get_legend_handles_labels()
             ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
 
-        # --- Column 5: Alpha vs Distance scatter (learned policy map) ---
-        ax = axs[i, 4]
-        # One dot per timestep: min dist to any obs vs alpha
+        # --- Column 6: Policy Map (alpha & phi vs distance) ---
+        ax = axs[i, 5]
         min_dists_per_t = np.array(dyn["dist"])
         alphas_arr = np.array(dyn["alphas"])
-        # Color by timestep to show temporal progression
-        sc5 = ax.scatter(min_dists_per_t, alphas_arr,
-                         c=np.arange(len(alphas_arr)), cmap="viridis",
-                         s=10, alpha=0.7, zorder=3)
-        if i == 0:
-            cbar5 = plt.colorbar(sc5, ax=ax, fraction=0.046, pad=0.04)
-            cbar5.set_label("Time Step")
+        phis_arr = np.array(dyn["phis"])
+
+        ax.scatter(min_dists_per_t, alphas_arr,
+                   c="purple", s=10, alpha=0.5, zorder=3, label=r"$\alpha$")
+        ax.scatter(min_dists_per_t, phis_arr,
+                   c="darkorange", s=10, alpha=0.5, marker="^", zorder=3, label=r"$\varphi$")
+
         ax.set_xlabel("Min Dist to Obs Surface (m)")
-        ax.set_ylabel(r"$\alpha$")
-        ax.set_ylim(0, 5.5)
+        ax.set_ylabel(r"$\alpha$ / $\varphi$")
+        ax.set_ylim(-1, 5.5)
         ax.set_xlim(-1, max(min_dists_per_t) * 1.05)
         ax.axvline(0, color="red", linewidth=1, linestyle=":", alpha=0.5, label="Collision boundary")
-        ax.set_title(f"{scen['name']} — Learned Policy Map", fontsize=11)
+        ax.axhline(0, color="gray", linewidth=0.8, linestyle=":", alpha=0.3)
+        ax.set_title(f"{scen['name']} — Policy Map (alpha & phi)", fontsize=11)
         ax.grid(True, alpha=0.3)
-        if i == 0:
-            ax.legend(loc="upper right", fontsize=7)
+        ax.legend(loc="upper right", fontsize=7)
 
     fig.tight_layout()
     fig.savefig(os.path.join(save_dir, "combined_scenarios.png"), bbox_inches="tight", dpi=150)
@@ -420,7 +445,7 @@ if __name__ == "__main__":
     print(f"\nRunning {N_RANDOM_SCENARIOS} random scenarios...")
     random_scenarios = generate_random_scenarios(N_RANDOM_SCENARIOS)
 
-    methods = [rf"$\alpha$={a}" for a in FIXED_ALPHAS] + [r"Dynamic $\alpha$"]
+    methods = [rf"$\alpha$={a}" for a in FIXED_ALPHAS] + [r"Dynamic $\alpha$+$\varphi$"]
     method_colors = [FIXED_ALPHA_COLORS[a] for a in FIXED_ALPHAS] + [DYNAMIC_COLOR]
     agg = {m: {"success": 0, "collisions": 0, "min_clearances": [], "efficiencies": [],
                "steps": [], "avg_speeds": []}
@@ -454,7 +479,7 @@ if __name__ == "__main__":
     # =====================================================================
     n_methods = len(methods)
     fig, axs = plt.subplots(2, 3, figsize=(20, 10))
-    fig.suptitle(f"Aggregate — 3-Obstacle Weave ({N_RANDOM_SCENARIOS} Random Scenarios)",
+    fig.suptitle(rf"Aggregate — Phi-CBF + Disturbance, noise={EVAL_NOISE} ({N_RANDOM_SCENARIOS} Random Scenarios)",
                  fontsize=16)
     x = np.arange(n_methods)
 
@@ -532,7 +557,7 @@ if __name__ == "__main__":
     # Console summary
     # =====================================================================
     print(f"\n{'='*115}")
-    print("HAND-PICKED SCENARIO RESULTS")
+    print(f"HAND-PICKED SCENARIO RESULTS (noise={EVAL_NOISE})")
     print(f"{'='*115}")
     print(f"{'Scenario':<25} {'Method':<18} {'Reached':>8} {'Collided':>9} "
           f"{'MinDist':>9} {'Steps':>7} {'AvgSpd':>8} {'PathEff':>9}")

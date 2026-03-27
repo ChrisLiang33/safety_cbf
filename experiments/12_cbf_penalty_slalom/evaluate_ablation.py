@@ -1,16 +1,13 @@
 """
-3-obstacle weave ablation: dynamic [kx,ky,alpha] vs fixed alpha + proportional k_nom.
-
-Outputs:
-  plots/combined_scenarios.png  (trajectory | speed | alpha+dist  side by side)
-  plots/aggregate_metrics.png
+CBF-penalty slalom ablation: dynamic [kx,ky,alpha] with CBF intervention penalty
+vs fixed alpha + proportional k_nom.
 """
 import numpy as np
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import ThreeObsWeaveDynamicEnv
+from env_dynamic import CBFPenaltySlalomEnv
 from env_fixed_alpha import FixedAlphaThreeObsEnv
 
 # --- CONFIG ---
@@ -215,7 +212,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     print("Loading 3-obstacle weave model...")
-    dyn_env = ThreeObsWeaveDynamicEnv()
+    dyn_env = CBFPenaltySlalomEnv()
     dyn_model = PPO.load(DYNAMIC_MODEL_PATH)
 
     fixed_envs = {}

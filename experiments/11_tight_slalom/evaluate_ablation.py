@@ -1,16 +1,13 @@
 """
-3-obstacle weave ablation: dynamic [kx,ky,alpha] vs fixed alpha + proportional k_nom.
-
-Outputs:
-  plots/combined_scenarios.png  (trajectory | speed | alpha+dist  side by side)
-  plots/aggregate_metrics.png
+Tight slalom ablation: dynamic [kx,ky,alpha] vs fixed alpha + proportional k_nom.
+Obstacles at y=±2-4 (tighter than standard slalom, forcing close encounters).
 """
 import numpy as np
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import ThreeObsWeaveDynamicEnv
+from env_dynamic import TightSlalomDynamicEnv
 from env_fixed_alpha import FixedAlphaThreeObsEnv
 
 # --- CONFIG ---
@@ -23,32 +20,32 @@ MAX_STEPS = 600
 N_RANDOM_SCENARIOS = 100
 OBS_RADIUS = 5.0
 
-# Hand-picked scenarios: 3 obstacles in slalom pattern
+# Tight slalom scenarios: obstacles at y=±2-4
 SCENARIOS = [
-    {"name": "Standard Slalom",
-     "obs": [np.array([30.0, 6.0]), np.array([50.0, -6.0]), np.array([70.0, 6.0])],
+    {"name": "Standard Tight",
+     "obs": [np.array([30.0, 3.0]), np.array([50.0, -3.0]), np.array([70.0, 3.0])],
      "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Tight Slalom",
-     "obs": [np.array([30.0, 5.0]), np.array([50.0, -5.0]), np.array([70.0, 5.0])],
+    {"name": "Very Tight",
+     "obs": [np.array([30.0, 2.0]), np.array([50.0, -2.0]), np.array([70.0, 2.0])],
      "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Wide Slalom",
-     "obs": [np.array([30.0, 8.0]), np.array([50.0, -8.0]), np.array([70.0, 8.0])],
+    {"name": "Moderate Tight",
+     "obs": [np.array([30.0, 4.0]), np.array([50.0, -4.0]), np.array([70.0, 4.0])],
      "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Clustered Obstacles",
-     "obs": [np.array([25.0, 6.0]), np.array([35.0, -6.0]), np.array([45.0, 6.0])],
+    {"name": "Clustered Tight",
+     "obs": [np.array([25.0, 3.0]), np.array([35.0, -3.0]), np.array([45.0, 3.0])],
      "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Spread Out",
-     "obs": [np.array([20.0, 7.0]), np.array([50.0, -7.0]), np.array([80.0, 7.0])],
+    {"name": "Spread Tight",
+     "obs": [np.array([20.0, 3.5]), np.array([50.0, -3.5]), np.array([80.0, 3.5])],
      "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
     {"name": "Off-Center Target",
-     "obs": [np.array([30.0, 6.0]), np.array([50.0, -6.0]), np.array([70.0, 6.0])],
-     "target_pos": np.array([100.0, 3.0]), "target_radius": 2.0},
+     "obs": [np.array([30.0, 3.0]), np.array([50.0, -3.0]), np.array([70.0, 3.0])],
+     "target_pos": np.array([100.0, 2.0]), "target_radius": 2.0},
     {"name": "All Same Side",
-     "obs": [np.array([25.0, 6.0]), np.array([50.0, 7.0]), np.array([75.0, 5.0])],
+     "obs": [np.array([25.0, 3.0]), np.array([50.0, 3.5]), np.array([75.0, 2.5])],
      "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Diagonal Scatter",
-     "obs": [np.array([25.0, 8.0]), np.array([55.0, -5.0]), np.array([75.0, 6.0])],
-     "target_pos": np.array([100.0, -2.0]), "target_radius": 2.0},
+    {"name": "Mixed Offsets",
+     "obs": [np.array([25.0, 4.0]), np.array([55.0, -2.5]), np.array([75.0, 3.0])],
+     "target_pos": np.array([100.0, -1.0]), "target_radius": 2.0},
 ]
 
 
@@ -192,14 +189,14 @@ def generate_random_scenarios(n, seed=42):
     rng = np.random.RandomState(seed)
     scenarios = []
     for i in range(n):
-        target_y = rng.uniform(-3.0, 3.0)
+        target_y = rng.uniform(-2.0, 2.0)
         target_radius = rng.uniform(1.5, 3.0)
         x1 = rng.uniform(20.0, 35.0)
-        y1 = rng.uniform(5.0, 8.0)
+        y1 = rng.uniform(2.0, 4.0)
         x2 = rng.uniform(45.0, 60.0)
-        y2 = rng.uniform(-8.0, -5.0)
+        y2 = rng.uniform(-4.0, -2.0)
         x3 = rng.uniform(65.0, 80.0)
-        y3 = rng.uniform(5.0, 8.0)
+        y3 = rng.uniform(2.0, 4.0)
         scenarios.append({
             "name": f"Random_{i}",
             "obs": [np.array([x1, y1]), np.array([x2, y2]), np.array([x3, y3])],
@@ -215,7 +212,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     print("Loading 3-obstacle weave model...")
-    dyn_env = ThreeObsWeaveDynamicEnv()
+    dyn_env = TightSlalomDynamicEnv()
     dyn_model = PPO.load(DYNAMIC_MODEL_PATH)
 
     fixed_envs = {}
