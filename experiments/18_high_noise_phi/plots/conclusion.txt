@@ -1,4 +1,8 @@
-TLDR: [TO FILL after results]
+TLDR: Even at 6x higher noise (0.3 vs 0.05), both alpha+phi (ISSf-CBF) and alpha-only
+(standard CBF) achieve 100% success and 0% safety violations. Phi is still not essential
+— alpha alone is sufficient to maintain safety. The noise level may still not be high
+enough, or the 1/h(x) amplification means trivially small phi already provides enough
+margin.
 
 Experiment 18: High-Noise Phi-CBF (ISSf-CBF Stress Test)
 =========================================================
@@ -35,31 +39,52 @@ Setup:
 
 Observations:
 - Combined Scenarios (8 hand-picked, noise=0.3):
-  [TO FILL after running experiment]
+  Both agents navigate all scenarios successfully. Trajectories are visually similar.
+  Phi values remain small/flat across most scenarios — not showing the dramatic spikes
+  near obstacles that were hypothesized. Alpha profiles are comparable between agents.
 
 - Alpha & Phi Adaptation:
-  [TO FILL — expecting visible phi spikes near obstacles, alpha-phi trade-off]
+  Alpha shows some adaptation near obstacles in both agents, but phi does not show
+  the expected complementary increase. The phi term stays low, suggesting the agent
+  learned it doesn't need large phi values even at this noise level.
 
 - Aggregate Metrics (100 random scenarios, noise=0.3):
-  - Target Reached: [TO FILL]
-  - Safety Violations: [TO FILL — key metric: does alpha-only get collisions?]
-  - Safety Margin: [TO FILL — expect alpha+phi >> alpha-only]
-  - Path Efficiency: [TO FILL]
-  - Episode Length: [TO FILL]
-  - Average Speed: [TO FILL]
+  - Target Reached: 100% (both) — no difference
+  - Safety Violations: 0% (both) — hypothesis rejected, alpha-only handles noise=0.3
+  - Safety Margin: alpha-only ~1.58m, alpha+phi ~1.38m (alpha-only slightly higher)
+  - Path Efficiency: ~0.99 (both)
+  - Episode Length: alpha-only ~310, alpha+phi ~323 (alpha+phi slightly slower)
+  - Average Speed: alpha-only ~2.85, alpha+phi ~3.03
 
 Conclusion:
-[TO FILL after analyzing results]
+The hypothesis that noise=0.3 would break the standard CBF was NOT confirmed. Both
+agents achieve perfect safety and task completion. Surprisingly, the alpha-only agent
+has a slightly *higher* safety margin (1.58 vs 1.38), suggesting the additional phi
+parameter may actually be slightly counterproductive — the agent trades some safety
+margin for speed (3.03 vs 2.85 m/s).
+
+Why phi still doesn't matter at noise=0.3:
+1. The CBF constraint itself is fundamentally robust — even without phi, the QP solver
+   produces controls that maintain h(x) > 0. The noise (0.3 * dt) is small relative
+   to the obstacle clearance the agent naturally maintains.
+2. The 1/h(x) amplification in the ISSf term means even phi ≈ 0.01 creates a large
+   corrective force near the boundary, so the agent never needs to learn large phi.
+3. The reward structure incentivizes reaching the target quickly. Since phi isn't needed
+   for safety, the agent keeps it minimal to avoid unnecessary conservatism.
 
 Comparison to Exp 15 (low noise):
 - Exp 15 noise: 0.05, Exp 18 noise: 0.3 (6x higher)
 - Exp 15 safety margin: dynamic 1.64m vs standard CBF ~0.93m (77% larger)
-- Exp 18 safety margin: [TO FILL — expect even larger gap]
+- Exp 18 safety margin: alpha-only 1.58m vs alpha+phi 1.38m (alpha-only is higher!)
 - Exp 15 collisions: 0% for all methods
-- Exp 18 collisions: [TO FILL — expect standard CBF to have non-zero collisions]
+- Exp 18 collisions: 0% for both methods — still no difference
 
 Future Steps:
-- If phi proves essential at noise=0.3, test at noise=0.5+ to find the breaking point
-- Combine ISSf-CBF with unicycle dynamics (hardest combination)
-- Test whether a fixed phi baseline (e.g., phi=0.5) achieves the same benefit as
-  learned phi, or whether adaptation is crucial
+- Try MUCH higher noise (0.5-1.0) to actually break the standard CBF — current noise
+  levels are still within alpha's handling capacity
+- Consider modifying the environment to make CBF constraint violations more likely:
+  tighter obstacle spacing, faster required speeds, higher-order dynamics
+- Alternatively, reduce the obstacle radius or increase robot speed to shrink safety
+  margins and make phi's contribution more critical
+- Investigate whether the reward function needs to explicitly penalize low phi to
+  encourage the agent to learn meaningful phi values

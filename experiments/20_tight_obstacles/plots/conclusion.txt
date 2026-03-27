@@ -1,0 +1,50 @@
+TLDR: [TO FILL after results]
+
+Experiment 20: Tight Obstacles (ISSf-CBF Narrow Gap Test)
+==========================================================
+
+Question:
+Exp 18 showed both agents handle noise=0.3 easily with wide obstacle spacing.
+Does tightening the obstacle layout (forcing narrower gaps) make phi essential?
+
+Hypothesis: with obstacles at y=±3.5-5 instead of ±5-8 and x gaps tightened
+(25-30, 40-50, 55-65 instead of 20-35, 45-60, 65-80), the robot must navigate
+through narrower corridors. The tighter spacing means:
+  1. h(x) values are smaller (closer to obstacles) → stronger 1/h amplification
+  2. Less room for error → noise has proportionally larger effect
+  3. Alpha-only agent may not be conservative enough in tight gaps
+
+Setup:
+- Dynamic alpha+phi agent: [kx, ky, alpha, phi] action space (ISSf-CBF)
+- Dynamic alpha-only agent: [kx, ky, alpha] action space (standard CBF)
+- Both trained fresh with same noise and tight obstacle layout
+- Obstacle positions (tighter than exp 18):
+  - Obs 1: x in [25, 30], y in [3.5, 5.0]
+  - Obs 2: x in [40, 50], y in [-5.0, -3.5]
+  - Obs 3: x in [55, 65], y in [3.5, 5.0]
+- Obstacle radius: 5.0 (same as exp 18)
+- Training disturbance: [0.0, 0.5], Eval noise: 0.3 (same as exp 18)
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (8 hand-picked, noise=0.3):
+  [TO FILL after running experiment]
+
+- Alpha & Phi Adaptation:
+  [TO FILL]
+
+- Aggregate Metrics (100 random scenarios, noise=0.3):
+  - Target Reached: [TO FILL]
+  - Safety Violations: [TO FILL — key metric]
+  - Safety Margin: [TO FILL — expect lower than exp 18 due to tighter gaps]
+  - Path Efficiency: [TO FILL]
+  - Episode Length: [TO FILL]
+  - Average Speed: [TO FILL]
+
+Conclusion:
+[TO FILL after analyzing results]
+
+Comparison to Exp 18 (same noise, wider obstacles):
+- Exp 18 obs y: ±5-8, Exp 20 obs y: ±3.5-5 (much tighter)
+- Exp 18: 0% violations for both
+- Exp 20: [TO FILL]

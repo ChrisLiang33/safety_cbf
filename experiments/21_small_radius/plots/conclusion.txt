@@ -1,0 +1,49 @@
+TLDR: [TO FILL after results]
+
+Experiment 21: Small Obstacle Radius (ISSf-CBF Amplification Test)
+===================================================================
+
+Question:
+In exp 18, phi stays flat because 1/h(x) amplification near r=5.0 obstacles means
+even tiny phi has large effect. Does reducing radius to 3.0 force phi to grow larger?
+
+Hypothesis: with smaller obstacles (r=3.0 instead of 5.0):
+  1. h(x) = ||x-obs||^2 - r^2 is LARGER at the same physical distance
+     (e.g., at distance 6m from center: h = 36-9=27 vs 36-25=11)
+  2. The 1/h(x) amplification is therefore WEAKER
+  3. Phi must take on larger values to compensate for the reduced amplification
+  4. This should make phi's learned values more visible and interpretable
+  5. The alpha-only agent loses the "free" amplification benefit too
+
+Setup:
+- Dynamic alpha+phi agent: [kx, ky, alpha, phi] action space (ISSf-CBF)
+- Dynamic alpha-only agent: [kx, ky, alpha] action space (standard CBF)
+- Both trained fresh with same noise and small radius
+- Obstacle radius: 3.0 (was 5.0 in exp 18) — 40% smaller
+- Same obstacle positions as exp 18
+- Training disturbance: [0.0, 0.5], Eval noise: 0.3 (same as exp 18)
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (8 hand-picked, noise=0.3):
+  [TO FILL after running experiment]
+
+- Alpha & Phi Adaptation:
+  [TO FILL — expecting larger phi values than exp 18 due to reduced 1/h amplification]
+
+- Aggregate Metrics (100 random scenarios, noise=0.3):
+  - Target Reached: [TO FILL]
+  - Safety Violations: [TO FILL]
+  - Safety Margin: [TO FILL]
+  - Path Efficiency: [TO FILL]
+  - Episode Length: [TO FILL]
+  - Average Speed: [TO FILL]
+
+Conclusion:
+[TO FILL after analyzing results]
+
+Comparison to Exp 18 (same noise, r=5.0):
+- Exp 18 radius: 5.0, Exp 21 radius: 3.0
+- At dist 6m from center: h_exp18 = 11, h_exp21 = 27 (2.5x larger → 2.5x less amplification)
+- Exp 18: phi stays flat near 0.01
+- Exp 21: [TO FILL — expect larger phi values]
