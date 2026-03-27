@@ -1,0 +1,54 @@
+TLDR: cheat to get higher alpha single OBS 
+
+Experiment 4: Single Obstacle + Alpha Reward Bonus
+====================================================
+
+Question:
+Does the alpha reward bonus (reward += 0.3 * alpha) help in the simpler 1-obstacle
+setting? This is the single-obstacle counterpart to exp 3, designed to isolate the
+effect of the alpha bonus from the added complexity of multiple obstacles.
+
+Setup:
+- Dynamic agent: [alpha, kx, ky] action space (alpha in [0.1, 5.0], kx/ky in [-2, 2])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 1 obstacle (radius=1.0), same layout as exp 1
+- Single-integrator dynamics, 900K PPO timesteps, 8 parallel envs
+- Reward: progress (50x), time penalty (-0.5), lateral penalty, + 0.3*alpha bonus
+
+Observations:
+- Trajectories (10 hand-picked scenarios):
+  - Dynamic alpha paths are smooth and efficient, similar to exp 1.
+  - Alpha coloring shows warmer tones (higher alpha) in open space compared to exp 1,
+    consistent with the alpha bonus pushing the agent toward higher alpha values.
+  - In some scenarios the dynamic trajectory cuts closer to the obstacle than exp 1,
+    reflecting the more aggressive alpha profile.
+
+- Alpha Adaptation:
+  - Clear alpha-vs-distance inverse relationship preserved across all scenarios.
+  - Open-space alpha values appear slightly higher than exp 1, consistent with
+    the bonus incentivizing high alpha when safe.
+  - Near-obstacle alpha dips are still present but may be slightly shallower.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 77%, alpha=0.5/1.0 100%, alpha=5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~2.92m, Dynamic ~1.28m, alpha=5.0 ~1.09m.
+    Dynamic is slightly closer to alpha=1.0 (~1.40m) territory.
+  - Path Efficiency: Dynamic ~0.94, near-optimal, similar to exp 1.
+
+Conclusion:
+The alpha bonus in the 1-obstacle setting produces nearly identical results to the
+base experiment (exp 1). Dynamic safety margin is ~1.28m (exp 1 was ~1.27m), success
+rate is 100%, and path efficiency is ~0.94. The alpha bonus has essentially no
+measurable effect in this simpler environment — the progress reward already provides
+enough incentive for the agent to use high alpha in open space.
+
+Combined with exp 3's results, the conclusion is that the alpha reward bonus is
+unnecessary reward shaping. The natural task reward (reach target quickly, avoid
+collisions) is sufficient to drive appropriate alpha behavior. Adding explicit alpha
+incentives provides at most marginal benefit and risks distorting the learned policy.
+
+Future Steps:
+- Abandon the alpha bonus approach — the natural reward is sufficient.
+- Try CBF intervention penalty instead (exp 5) — a fundamentally different reward
+  shaping idea that targets the QP correction rather than the alpha value itself.

@@ -1,0 +1,76 @@
+TLDR: Obstacles moved to y=±[2,4] (surface within 1-3m of path). Dynamic alpha
+maintains 100% success at 1.01 path efficiency. Sharper, taller alpha spikes than
+exp 9. alpha=0.5 takes 75% longer detours. Close encounters amplify dynamic alpha's
+advantage.
+
+Experiment 11: Tight Slalom (Close Obstacle Encounters)
+========================================================
+
+Question:
+What happens when the slalom obstacles are placed much closer to the path centerline?
+Experiment 9 placed obstacles at y in [5,8] (surface 0-3m from y=0). Here we move
+them to y in [2,4] — with radius=5, the surface reaches y in [-3,-1], meaning the
+robot passes within 1-3m of the obstacle boundary. This forces very close encounters
+where steering alone can't avoid heavy CBF intervention. Does dynamic alpha still
+help when the robot must pass extremely close to obstacles?
+
+Setup:
+- Dynamic agent: [kx, ky, alpha] action space (kx/ky in [-3, 3], alpha in [0.1, 5.0])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 3 obstacles (radius=5.0 each) in TIGHT slalom:
+  - Obs 1: x in [20,35], y in [+2, +4] (surface reaches y=-3 to y=-1)
+  - Obs 2: x in [45,60], y in [-4, -2] (surface reaches y=+1 to y=+3)
+  - Obs 3: x in [65,80], y in [+2, +4]
+- Target at x=100, y in [-2,2], radius in [1.5,3.0]
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (8 hand-picked):
+  - Dynamic alpha navigates all 8 tight slalom scenarios successfully.
+  - Trajectories show tighter weaving paths than exp 9 due to closer obstacles.
+  - Robot speed shows deeper dips at each obstacle — the CBF intervenes more heavily
+    when the robot passes within 1-3m of the surface.
+  - Alpha shows higher spikes near obstacles compared to exp 9, reflecting the
+    agent's need to raise alpha more aggressively to maintain speed through the
+    very tight passages.
+  - CBF intervention (col 2) shows pronounced peaks at each obstacle, with the
+    dynamic agent showing spikier but shorter interventions than fixed baselines.
+
+- Alpha Adaptation Details:
+  - Alpha spikes are taller (~4-5) and more abrupt than exp 9, matching the closer
+    obstacle encounters.
+  - The agent learned that tight passages require aggressive alpha to prevent the
+    CBF from stalling the robot entirely.
+  - Between obstacles, alpha drops rapidly to moderate levels (~1-2).
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 83%, alpha=0.5/1.0/5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~6.1m (avoids obstacles entirely by going way around),
+    alpha=0.5 ~3.0m, Dynamic ~1.50m, alpha=5.0 ~0.56m.
+  - Path Efficiency: Dynamic ~1.01, alpha=0.5 ~1.75 (large detours), alpha=5.0 ~0.98.
+  - Episode Length: Dynamic ~375 steps, alpha=5.0 ~313 steps, alpha=0.1 ~498 steps.
+  - Average Speed: Dynamic ~2.0 m/s, alpha=5.0 ~2.4 m/s.
+
+Conclusion:
+The tight slalom amplifies the differences between methods. alpha=0.1 improves to
+83% success (vs 21% in exp 9) because the tight layout actually creates clearer
+paths that the overcautious agent can eventually find, but at massive inefficiency
+(1.75 path efficiency = 75% longer than optimal). Dynamic alpha maintains 100% success
+with near-optimal paths (~1.01 efficiency) and reasonable margins (~1.50m).
+
+The tight layout is where dynamic alpha's per-obstacle adaptation matters most. The
+agent must raise alpha aggressively at each close encounter (to prevent stalling) but
+can't leave it permanently high (which would reduce margins elsewhere). The three
+distinct alpha spikes are taller and sharper than exp 9, showing the agent adapted
+its strategy to the tighter geometry.
+
+alpha=0.5 shows the widest margin (~3.0m) because it detours significantly around
+obstacles. Dynamic alpha passes much closer (~1.50m) but at nearly optimal path
+efficiency — a much better tradeoff.
+
+Future Steps:
+- Add CBF intervention penalty to this layout (exp 12).
+- Add disturbance to the standard layout (exp 13).
+- These tight encounters motivate the ISSf-CBF (exp 14) — when the robot must pass
+  very close to obstacles, a learnable robustness margin (phi) could help.

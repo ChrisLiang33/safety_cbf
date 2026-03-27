@@ -1,0 +1,104 @@
+TLDR: Framework generalizes to moving obstacles (0.1-0.5 m/s drift). 100% success,
+0% collisions. CBF drift term (Lf_h) handles obstacle motion. Alpha shows reactive,
+oscillatory behavior instead of clean three-spike pattern. Performance similar to
+static exp 9.
+
+Experiment 17: Moving Obstacles Weave
+======================================
+
+Question:
+Can the dynamic alpha agent handle obstacles that move during the episode? All prior
+experiments used static obstacles. Real-world scenarios involve dynamic environments
+where obstacles drift, approach, or retreat. Here, each obstacle has a random velocity
+(speed in [0.1, 0.5] m/s, random direction) that bounces when it drifts too far from
+its initial position (±3m). The CBF must account for obstacle motion via an additional
+Lie derivative term (Lf_h). Can the agent learn to coordinate steering and alpha
+with a moving obstacle field?
+
+Setup:
+- Dynamic agent: [kx, ky, alpha] action space (kx/ky in [-3, 3], alpha in [0.1, 5.0])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 3 moving obstacles (radius=5.0), same initial slalom layout as exp 9
+  - Each obstacle has random velocity (0.1-0.5 m/s, random direction)
+  - Bounce-back when drifting >3m from initial position (oscillating drift)
+- CBF for moving obstacles:
+  - h = ||p_robot - p_obs||^2 - r^2
+  - Lf_h = -2 * (p_robot - p_obs)^T * v_obs (drift term from obstacle motion)
+  - Constraint: Lgh @ u >= -alpha * h - Lf_h
+- Observation includes obstacle velocities (20 dims total)
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (8 hand-picked):
+  - Dynamic alpha successfully navigates all 8 scenarios with moving obstacles.
+  - Trajectories (col 1) show the obstacles with faded circles/trails indicating
+    their motion over time. Obstacle positions shift noticeably during the episode.
+  - In "Closing In" scenario where obstacles move toward the centerline, the agent
+    adjusts its path to avoid the shrinking gap.
+  - In "Head-On Obs 1" where obs 1 moves toward the robot, the speed and alpha
+    profiles show more reactive, oscillatory behavior compared to static obstacles.
+  - Robot speed (col 2) shows the three-dip pattern but with more variability —
+    the constantly changing obstacle positions create a shifting CBF landscape.
+    Some scenarios show speed oscillations near obstacles as the CBF responds to
+    approaching/retreating motion.
+  - Alpha (col 3) shows the per-obstacle spikes but with more complex shapes.
+    When obstacles approach, alpha must respond dynamically — not just the
+    one-time spike seen with static obstacles.
+  - In "Scatter Motion" and "Diagonal Scatter" scenarios with diverse obstacle
+    velocities, alpha and speed profiles are more erratic, reflecting real-time
+    adaptation to the changing environment.
+
+- Alpha Adaptation Details:
+  - Alpha behavior is fundamentally more reactive than static experiments. Instead
+    of smooth, predictable spikes, alpha shows rapid fluctuations near obstacles
+    as their positions (and therefore h values) change continuously.
+  - The CBF drift term (Lf_h = -2 * x_diff^T * v_obs) means an obstacle moving
+    toward the robot tightens the constraint (positive Lf_h → larger RHS), and
+    the agent must either lower alpha, steer away, or both.
+  - The agent appears to have learned to anticipate obstacle motion using the
+    velocity observations — it preemptively adjusts rather than purely reacting.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 ~33%, alpha=0.5/1.0/5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods. The moving-obstacle CBF (with Lf_h
+    drift term) successfully maintains safety despite obstacle motion.
+  - Safety Margin: alpha=0.1 ~3.5m, Dynamic ~1.14m, alpha=5.0 ~0.51m.
+    Dynamic sits between moderate and aggressive baselines, similar to exp 9.
+  - Path Efficiency: Dynamic ~0.96, slightly lower than exp 9's 0.98 due to
+    extra maneuvering around moving obstacles.
+  - Episode Length: Dynamic ~365 steps, similar to exp 9's ~369.
+  - Average Speed: Dynamic ~2.06 m/s, comparable to exp 9.
+
+Conclusion:
+The moving obstacle experiment demonstrates that the RL-CBF framework generalizes
+to dynamic environments. The agent maintains 100% success and 0% collisions despite
+obstacles drifting at up to 0.5 m/s. The modified CBF constraint (including the Lf_h
+drift term) correctly accounts for obstacle motion, and the agent learns to leverage
+the obstacle velocity observations for anticipatory planning.
+
+alpha=0.1 improves to 33% (vs 21% in static exp 9), possibly because the oscillating
+obstacles occasionally create wider gaps that the conservative agent can exploit.
+All other fixed baselines maintain 100% success, showing the moving-obstacle CBF
+is robust across alpha values.
+
+Performance is remarkably similar to static exp 9: same success rate, similar speed,
+marginally lower path efficiency (0.96 vs 0.98). The agent didn't need a radically
+different strategy — the CBF's Lf_h term handles most of the obstacle motion
+compensation automatically, and the agent's steering and alpha adaptation carry
+over from the static case.
+
+The most interesting behavior is in the challenging scenarios ("Head-On", "Closing In")
+where obstacle motion actively threatens the robot's path. Here the alpha and speed
+profiles show real-time reactive adjustments that go beyond the clean three-spike
+pattern of static obstacles — evidence that the agent learned online adaptation
+rather than a fixed open-loop strategy.
+
+Future Steps:
+- Increase obstacle speed (1.0+ m/s) to stress-test the framework — at what speed
+  does the CBF's discrete-time implementation fail to prevent collisions?
+- Combine moving obstacles with ISSf-CBF (phi) — does phi help compensate for the
+  additional uncertainty from obstacle motion?
+- Test moving obstacles with unicycle dynamics — the hardest combination of
+  challenges encountered so far.
+- Consider obstacles with adversarial motion (actively seeking the robot) vs
+  random drifting.

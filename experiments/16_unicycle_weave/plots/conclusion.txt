@@ -1,0 +1,86 @@
+TLDR: Biggest win for dynamic alpha — 93% success vs 61-66% for ALL fixed baselines.
+Unicycle dynamics are fundamentally harder (can't sidestep). Dynamic alpha coordinates
+speed, turning, and alpha together. Strongest evidence that adaptive alpha provides
+genuine value beyond any fixed choice.
+
+Experiment 16: Unicycle Weave (Nonholonomic Dynamics)
+=====================================================
+
+Question:
+Can the dynamic alpha agent handle nonholonomic (unicycle) dynamics? All previous
+experiments used a single-integrator (x_dot = u) where the robot can move in any
+direction instantaneously. Unicycle dynamics constrain the robot to move forward in
+its heading direction, requiring coordination between speed (v), steering (omega),
+and alpha. The CBF can only modulate forward speed — it cannot force the robot to
+turn. Does the RL agent learn to coordinate all three controls to navigate the
+3-obstacle slalom?
+
+Setup:
+- Dynamic agent: [v_des, omega_des, alpha] action space
+  - v_des in [0, 3.0] m/s (forward speed, no reverse)
+  - omega_des in [-1.5, 1.5] rad/s (turn rate)
+  - alpha in [0.1, 5.0]
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [v_des, omega_des]
+- Dynamics: x_dot = v*cos(theta), y_dot = v*sin(theta), theta_dot = omega
+- CBF: Lgh = [2*dx*cos(theta) + 2*dy*sin(theta), 0] (omega has no direct effect on h)
+- 3 obstacles (radius=5.0 each), same slalom layout as exp 9
+- 100m map, 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (8 hand-picked):
+  - Dynamic alpha successfully navigates most scenarios, showing smooth S-shaped
+    weaving paths characteristic of unicycle dynamics.
+  - Trajectories are noticeably curvier than the single-integrator experiments —
+    the unicycle must plan turns ahead of time and can't instantly change direction.
+  - Speed profiles show the same three-dip pattern but with smoother transitions
+    due to the inertia of the heading angle.
+  - Alpha shows distinct per-obstacle spikes, similar to exp 9 but adapted to the
+    unicycle's approach geometry.
+  - Some scenarios show the dynamic agent taking slightly tighter lines than fixed
+    baselines, leveraging alpha to maintain speed through turns.
+
+- Alpha Adaptation Details:
+  - Alpha adaptation is similar to exp 9 but the timing is shifted — alpha changes
+    anticipate the obstacle earlier because the unicycle needs time to turn.
+  - The CBF constraint Lgh = [2*dx*cos(theta) + 2*dy*sin(theta), 0] means only
+    forward speed is constrained (omega is unconstrained by the CBF). The agent
+    learned to use omega for steering and v+alpha for speed management.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 61%, alpha=0.5 66%, alpha=1.0 65%, alpha=5.0 65%,
+    Dynamic 93%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~1.56m (highest), Dynamic ~1.24m, alpha=5.0 ~0.97m.
+  - Path Efficiency: Dynamic ~0.86, fixed baselines ~0.61-0.64.
+    Dynamic is significantly more path-efficient than all fixed baselines.
+  - Episode Length: Dynamic ~601 steps, fixed baselines ~700+ steps.
+  - Average Forward Speed: alpha=0.1 ~2.0 m/s, Dynamic ~2.29 m/s, alpha=5.0 ~2.29 m/s.
+
+Conclusion:
+The unicycle experiment reveals the biggest performance gap between dynamic and fixed
+alpha across all experiments. Dynamic alpha achieves 93% success vs 61-66% for all
+fixed baselines — a dramatic advantage. The nonholonomic constraint makes the task
+fundamentally harder: the robot can't sidestep obstacles, it must plan turns in advance,
+and the CBF can only slow the robot down (not turn it). This creates a setting where
+adaptive alpha is essential rather than merely helpful.
+
+Fixed alpha baselines all cluster around 61-66% success regardless of alpha value.
+This suggests that in the unicycle setting, the alpha value is less important than
+the steering strategy, but the fixed-alpha agents can't coordinate their steering
+well enough to reliably navigate the slalom. The dynamic alpha agent achieves 93%
+by learning to coordinate speed, turn rate, and alpha together.
+
+Path efficiency tells a clear story: Dynamic ~0.86 vs fixed ~0.61-0.64. The dynamic
+agent takes significantly more direct paths because it can modulate the CBF's speed
+constraint (via alpha) while actively steering, producing smoother trajectories.
+Fixed baselines get caught in wide detours or CBF-induced stalls.
+
+This is the strongest evidence that dynamic alpha provides genuine value beyond
+what any fixed alpha can achieve, especially under more realistic dynamics models.
+
+Future Steps:
+- Add disturbance to unicycle dynamics — does the advantage persist with noise?
+- Test ISSf-CBF (phi) with unicycle dynamics — can phi provide additional robustness
+  for the nonholonomic case?
+- Investigate why all fixed baselines cluster at ~65% — is it a fundamental limit
+  of the proportional steering + fixed CBF combination, or a training issue?

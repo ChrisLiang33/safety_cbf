@@ -1,0 +1,61 @@
+TLDR: trying to address, the agent learning a good kx, ky, so the CBF dont have to step in. also best alpha value it can be. 
+
+Experiment 5: CBF Intervention Penalty (2 Obstacles)
+=====================================================
+
+Question:
+Does penalizing the CBF intervention (reward -= 1.0 * ||safe_u - k_nom||) lead the
+agent to preemptively avoid triggering the safety filter? The idea is that the QP
+correction ||safe_u - k_nom|| measures how much the CBF had to modify the agent's
+desired control. By penalizing this, the agent should learn to either steer around
+obstacles more cleanly or lower alpha near obstacles so the constraint is already
+satisfied before the QP runs.
+
+Setup:
+- Dynamic agent: [alpha, kx, ky] action space (alpha in [0.1, 5.0], kx/ky in [-2, 2])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 2 obstacles (radius=1.0 each), same layout as exp 2
+- Single-integrator dynamics, 900K PPO timesteps, 8 parallel envs
+- Reward: progress (50x), time penalty (-0.5), lateral penalty, - 1.0*||safe_u - k_nom||
+
+Observations:
+- Trajectories (9 hand-picked scenarios):
+  - Dynamic alpha trajectories are smoother and give slightly wider berth to obstacles
+    compared to exp 2. The agent seems to anticipate the CBF boundary and steer
+    around it rather than relying on the QP to correct its path.
+  - In "Straight Gauntlet" and similar tight scenarios, the dynamic agent takes a
+    cleaner line that avoids large QP corrections.
+  - Fixed baselines are identical to exp 2 (they don't have the penalty).
+
+- Alpha Adaptation:
+  - Alpha still shows the characteristic inverse-distance pattern.
+  - The alpha dips near obstacles may be slightly deeper than exp 2, consistent with
+    the agent lowering alpha to reduce the severity of QP corrections near boundaries.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 69%, alpha=0.5/1.0/5.0 100%, Dynamic 99%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~2.48m, Dynamic ~0.96m, alpha=5.0 ~0.83m.
+  - Path Efficiency: Dynamic ~0.99, the best across all methods.
+
+Conclusion:
+The CBF penalty produces the most path-efficient dynamic agent so far (~0.99,
+essentially straight-line optimal). The agent learns to preemptively steer around
+obstacles so the QP barely needs to intervene. The safety margin (~0.96m) is
+slightly larger than exp 2's (~0.90m), suggesting the agent gives a bit more
+clearance to avoid triggering the CBF correction rather than cutting close and
+relying on the filter.
+
+The 99% success rate (vs 100% in exp 2) is a minor regression — one scenario
+likely timed out. The CBF penalty creates a slight incentive tension: the agent
+is penalized for being near obstacles (where the QP corrects more), which could
+occasionally cause overly cautious detours that lead to timeouts.
+
+Overall, the CBF penalty is a promising reward shaping approach — it produces
+cleaner, more anticipatory behavior than the raw progress reward alone. It teaches
+the agent to work *with* the CBF rather than *against* it.
+
+Future Steps:
+- Isolate the alpha lever: remove steering control and test alpha-only (exp 6).
+- Scale to larger environments with 3 obstacles (exp 9) and test the CBF penalty
+  approach there (exp 12).

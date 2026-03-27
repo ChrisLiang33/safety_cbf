@@ -1,0 +1,93 @@
+TLDR: With noise, phi shows measurable value — safety margin 1.64m vs exp 13's
+0.93m under identical noise (77% larger clearance). Agent learns modest phi increases
+near obstacles. Both methods hit 0% collisions at this noise level, but phi provides
+a meaningful extra buffer.
+
+Experiment 15: Phi-CBF + Disturbance (ISSf-CBF with Noise)
+==========================================================
+
+Question:
+Does the agent learn to use phi to compensate for disturbance noise? Experiment 14
+showed that phi stays low in a noise-free environment. The ISSf-CBF's robustness
+term (||Lgh||^2 * phi)/h(x) is theoretically designed to reject bounded disturbances.
+Here we add the same uniform noise as exp 13 (domain-randomized scale in [0, 0.1])
+to test the hypothesis: does the agent learn to raise phi when noise is present,
+using the formal robustness margin to maintain safety guarantees?
+
+Setup:
+- Dynamic agent: [kx, ky, alpha, phi] action space
+  - kx/ky in [-3, 3], alpha in [0.1, 5.0], phi in [0.01, 10.0]
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with proportional go-to-goal steering
+  - Baselines use standard CBF (no phi), with same noise applied
+- ISSf-CBF RHS: -alpha * h(x) + (||Lgh||^2 * phi) / max(h(x), 1e-4)
+- Disturbance: uniform noise, scale domain-randomized [0.0, 0.1] per episode
+- Dynamics: robot_pos += safe_u * dt + noise * dt
+- 3 obstacles (radius=5.0), same slalom layout as exps 9/13/14
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+- Evaluation at fixed noise=0.05
+
+Observations:
+- Combined Scenarios (8 hand-picked, noise=0.05):
+  - Dynamic agent with phi navigates all 8 scenarios successfully.
+  - Trajectories show slightly noisier paths than exp 14, consistent with the
+    additive disturbance. Overall weaving pattern is preserved.
+  - Robot speed shows the three-dip pattern, with some additional variability
+    from the noise affecting position and therefore CBF response.
+  - Alpha adaptation shows the familiar three per-obstacle spikes, robust to noise.
+  - Phi adaptation (rightmost columns): phi shows slightly more activity compared
+    to exp 14. In some scenarios, phi appears to increase modestly near obstacles,
+    suggesting the agent learned that noise near the obstacle boundary is the most
+    dangerous and warrants a small additional margin. However, phi values remain
+    relatively low overall — the agent doesn't dramatically increase phi.
+
+- Phi vs Disturbance Analysis:
+  - The phi response is subtle rather than dramatic. The agent doesn't learn to
+    crank phi to its maximum near obstacles, which would be overly conservative.
+  - The (||Lgh||^2 * phi)/h(x) term grows very large as h approaches 0 (near
+    obstacles), so even a small phi provides significant constraint tightening
+    near the boundary. The agent's strategy of keeping phi moderate is rational.
+  - Compared to exp 14 (no noise), there's a marginal increase in phi near
+    obstacles, but the difference is small — suggesting the noise level (0.05)
+    is not severe enough to require large phi values.
+
+- Aggregate Metrics (100 random scenarios, noise=0.05):
+  - Target Reached: alpha=0.1 ~21%, alpha=0.5/1.0/5.0 100%, Dynamic a+phi 100%.
+  - Safety Violations: 0% across all methods. Standard CBF baselines also maintain
+    0% despite noise — the noise scale is within inherent CBF margins.
+  - Safety Margin: Dynamic ~1.64m (between exp 14's 1.88m and exp 13's 0.93m).
+    The phi term appears to help maintain a larger margin than exp 13's standard
+    CBF under the same noise conditions.
+  - Path Efficiency: Dynamic ~0.98, unchanged from noise-free.
+  - Episode Length: Dynamic ~375 steps, similar to exp 14.
+  - Average Speed: Dynamic ~1.96 m/s, slight decrease from exp 14's ~1.98.
+
+Conclusion:
+The ISSf-CBF with disturbance shows a modest but measurable benefit from phi.
+Comparing to exp 13 (standard CBF + same noise), the phi-equipped agent maintains
+a larger safety margin (1.64m vs 0.93m) while achieving the same success rate and
+path efficiency. This suggests phi does provide some additional robustness buffer
+that counteracts the margin-eroding effect of noise.
+
+However, the benefit is incremental rather than transformative. Both the standard
+CBF (exp 13) and ISSf-CBF (exp 15) achieve 0% collisions at this noise level, so
+the phi term isn't saving the agent from collisions — it's providing a comfort
+margin. At higher noise levels, this extra margin could become critical.
+
+The agent's phi strategy is conservative-by-default: keep phi low to minimize
+unnecessary constraint tightening, with small increases near obstacles where the
+1/h(x) amplification makes even small phi values powerful. This is a sensible
+learned behavior — the ISSf-CBF's 1/h(x) structure means the agent doesn't need
+to choose large phi to get a meaningful robustness margin near the boundary.
+
+Key insight: the safety margin comparison (exp 13: 0.93m vs exp 15: 1.64m) under
+identical noise conditions is the clearest evidence that phi provides value in the
+noisy setting. The phi-equipped agent maintains a 77% larger minimum clearance
+despite controlling with the same noise and obstacle layout.
+
+Future Steps:
+- Test with much larger noise (scale > 0.3) to see if phi becomes essential for
+  preventing collisions (not just increasing margin).
+- Explore whether phi should be conditioned on a disturbance estimate rather than
+  the same observation space as alpha.
+- Consider fixed phi ablation: does a fixed phi=0.5 achieve the same benefit as
+  learned phi, or does adaptation matter?

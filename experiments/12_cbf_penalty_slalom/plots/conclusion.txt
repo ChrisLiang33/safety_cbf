@@ -1,0 +1,73 @@
+TLDR: CBF penalty on 3-obstacle slalom increases safety margin (1.84m vs exp 9's
+1.43m) while maintaining 100% success. Agent gives wider berth to obstacles to avoid
+QP corrections. Produces smoother, more anticipatory trajectories.
+
+Experiment 12: CBF Penalty Slalom (3 Obstacles)
+================================================
+
+Question:
+Does the CBF intervention penalty (reward -= 5.0 * ||safe_u - k_nom||) improve the
+agent's behavior in the 3-obstacle slalom layout? Experiment 5 showed this penalty
+produced the most path-efficient agent on 2 obstacles. Here we test whether the same
+approach scales to the 100m, 3-obstacle weave from exp 9. The hypothesis is that the
+penalty will teach the agent to preemptively steer around obstacles more cleanly and
+adjust alpha to minimize QP corrections.
+
+Setup:
+- Dynamic agent: [kx, ky, alpha] action space (kx/ky in [-3, 3], alpha in [0.1, 5.0])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 3 obstacles (radius=5.0 each), same slalom layout as exp 9
+- CBF penalty weight: 5.0 (stronger than exp 5's 1.0, scaled for larger map)
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+- Reward: progress (50x), time penalty (-1.0), - 5.0*||safe_u - k_nom||
+
+Observations:
+- Combined Scenarios (8 hand-picked):
+  - Dynamic alpha successfully weaves through all scenarios.
+  - Trajectories appear to give slightly wider berth to obstacles compared to exp 9,
+    consistent with the agent learning to avoid triggering CBF corrections.
+  - Robot speed dips are slightly shallower near obstacles — the agent's preemptive
+    steering reduces the magnitude of CBF intervention, keeping speed higher.
+  - Alpha shows three per-obstacle spikes similar to exp 9, but the spikes are
+    slightly lower, suggesting the agent relies more on steering and less on alpha
+    to avoid intervention.
+  - CBF intervention (col 2) shows lower peak magnitudes than exp 9, confirming the
+    penalty works — the agent learned to minimize the QP correction.
+
+- Alpha Adaptation Details:
+  - Similar three-spike pattern to exp 9, but with lower peak alpha values.
+  - The agent's strategy shifted: rather than raising alpha aggressively near obstacles
+    (which allows the QP to pass larger k_nom through), it steers more carefully and
+    uses moderate alpha, resulting in less intervention overall.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 21%, alpha=0.5/1.0/5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: Dynamic ~1.84m (larger than exp 9's ~1.43m), alpha=5.0 ~0.56m.
+    The CBF penalty pushes the agent to maintain more clearance.
+  - Path Efficiency: Dynamic ~0.98, same as exp 9.
+  - Episode Length: Dynamic ~380 steps, slightly slower than exp 9's ~369 steps.
+  - Average Speed: Dynamic ~1.98 m/s, similar to exp 9.
+
+Conclusion:
+The CBF penalty successfully modifies the agent's behavior in the 3-obstacle slalom.
+The most notable effect is the increased safety margin (1.84m vs 1.43m in exp 9) —
+the agent gives wider berth to obstacles to avoid triggering the QP filter. Path
+efficiency remains near-optimal, and success rate stays at 100%.
+
+The tradeoff is subtle: the CBF penalty agent is slightly slower than exp 9 (~380 vs
+~369 steps) because it takes wider paths around obstacles. But the reduced CBF
+intervention means the agent's intended control (k_nom) is executed more faithfully
+by the QP, producing smoother, more predictable motion.
+
+Comparing to exp 5 (CBF penalty on 2 obstacles): the approach scales well. The
+penalty produces cleaner, more anticipatory behavior regardless of obstacle count.
+However, the improvement over the base approach (exp 9) is incremental rather than
+transformative — the unpenalized agent already learns good behavior, and the penalty
+mainly shifts the safety-speed tradeoff toward slightly more conservative but
+smoother trajectories.
+
+Future Steps:
+- Add disturbance to the standard layout (exp 13) — does external noise break the
+  learned policies?
+- Test ISSf-CBF with learnable phi (exp 14) — can a robustness margin be learned?

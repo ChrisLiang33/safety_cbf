@@ -1,0 +1,58 @@
+TLDR: artificialy trying to cheat and make the alpha higher on multi OBS
+
+Experiment 3: Multi Obstacle + Alpha Reward Bonus
+===================================================
+
+Question:
+Does adding an explicit reward bonus for high alpha (reward += 0.3 * alpha) improve
+the agent's behavior in the 2-obstacle setting? The hypothesis is that without this
+incentive, the agent might learn an overly conservative alpha strategy (keeping alpha
+low everywhere "just in case"), and that a direct reward signal for high alpha could
+push it to be more aggressive in open space while still lowering alpha near obstacles.
+
+Setup:
+- Dynamic agent: [alpha, kx, ky] action space (alpha in [0.1, 5.0], kx/ky in [-2, 2])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 2 obstacles (radius=1.0 each), same layout as exp 2
+- Single-integrator dynamics, 900K PPO timesteps, 8 parallel envs
+- Reward: progress (50x), time penalty (-0.5), lateral penalty, + 0.3*alpha bonus
+
+Observations:
+- Trajectories (9 hand-picked scenarios):
+  - Dynamic alpha trajectories are visually similar to exp 2 — smooth paths around
+    both obstacles with clear alpha adaptation.
+  - The alpha coloring along paths appears slightly more uniformly warm (higher alpha)
+    in open-space segments compared to exp 2, suggesting the alpha bonus has some effect.
+  - Fixed baselines perform similarly to exp 2.
+
+- Alpha Adaptation:
+  - Alpha still shows clear dips near obstacles, but the baseline alpha level in
+    open space appears slightly higher than exp 2.
+  - The inverse correlation between alpha and distance-to-obstacle is preserved.
+  - The alpha bonus doesn't appear to break the near-obstacle lowering behavior.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 64%, alpha=0.5/1.0/5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~2.49m, Dynamic ~0.77m, alpha=5.0 ~0.74m.
+    Dynamic is now very close to the most aggressive baseline.
+  - Path Efficiency: Dynamic ~0.93, comparable to alpha=1.0/5.0 (~0.96-0.98).
+
+Conclusion:
+The alpha reward bonus produces marginally more aggressive behavior — the dynamic
+agent's safety margin (~0.77m) is tighter than exp 2 (~0.90m), approaching
+alpha=5.0 levels (~0.74m). The agent still maintains 100% success and 0% collisions.
+However, the improvement over exp 2 is small and the margin compression raises a
+question: is pushing alpha higher in open space actually useful, or does it just
+erode the safety buffer without meaningful speed gains?
+
+The alpha bonus didn't hurt, but the benefit is marginal. The natural reward structure
+(progress + time penalty) already provides sufficient incentive for the agent to keep
+alpha high when safe. Adding an explicit alpha bonus mostly shifts the tradeoff curve
+slightly toward more aggressive behavior.
+
+Future Steps:
+- Test the same alpha bonus on 1 obstacle (exp 4) to see if the effect is clearer
+  in a simpler environment.
+- Try a different reward shaping approach: penalize CBF intervention (exp 5) instead
+  of rewarding high alpha.

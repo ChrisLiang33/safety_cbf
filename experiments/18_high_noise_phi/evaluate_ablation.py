@@ -1,6 +1,10 @@
 """
-Phi-CBF ablation: dynamic [kx,ky,alpha,phi] vs fixed alpha + proportional k_nom.
-No disturbance.
+Phi-CBF + HIGH Disturbance ablation:
+  Dynamic [kx,ky,alpha,phi] (ISSf-CBF) vs Dynamic [kx,ky,alpha] (standard CBF)
+Both trained and evaluated with high noise (eval=0.3).
+
+Goal: show that phi provides genuine safety value under high disturbance,
+not just a comfort margin.
 
 Outputs:
   plots/combined_scenarios.png  (7-col: traj | alpha+phi+obs_zone | speed | alpha+dist | phi+dist | speed+alpha+phi | policy map)
@@ -11,18 +15,19 @@ import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import PhiCBFDynamicEnv
-from env_fixed_alpha import FixedAlphaThreeObsEnv
+from env_dynamic import PhiCBFHighNoiseEnv
+from env_alpha_only import AlphaOnlyHighNoiseEnv
 
 # --- CONFIG ---
-DYNAMIC_MODEL_PATH = "./models_dynamic/dynamic_2000k_model"
-FIXED_ALPHAS = [0.1, 0.5, 1.0, 5.0]
-_cmap = plt.cm.plasma
-FIXED_ALPHA_COLORS = {a: _cmap((a - 0.1) / (5.0 - 0.1)) for a in FIXED_ALPHAS}
-DYNAMIC_COLOR = "black"
+PHI_MODEL_PATH = "./models_dynamic/dynamic_2000k_model"
+ALPHA_ONLY_MODEL_PATH = "./models_alpha_only/alpha_only_2000k_model"
 MAX_STEPS = 600
 N_RANDOM_SCENARIOS = 100
 OBS_RADIUS = 5.0
+EVAL_NOISE = 0.3
+
+PHI_COLOR = "black"
+ALPHA_ONLY_COLOR = "#2196F3"  # blue
 
 SCENARIOS = [
     {"name": "Standard Slalom",
@@ -71,8 +76,10 @@ def path_length(traj_x, traj_y):
     return np.sum(np.sqrt(dx**2 + dy**2))
 
 
-def run_dynamic_episode(env, model, scen):
+def run_phi_episode(env, model, scen):
+    """Run episode with dynamic [kx, ky, alpha, phi] (ISSf-CBF)."""
     obs = setup_scenario(env, scen)
+    env.disturbance_scale = EVAL_NOISE
     traj_x, traj_y, alphas, phis, speeds = [], [], [], [], []
     k_nom_speeds, safe_u_speeds = [], []
     dist_list = []
@@ -137,9 +144,11 @@ def run_dynamic_episode(env, model, scen):
     }
 
 
-def run_fixed_episode(env, scen):
+def run_alpha_only_episode(env, model, scen):
+    """Run episode with dynamic [kx, ky, alpha] (standard CBF, no phi)."""
     obs = setup_scenario(env, scen)
-    traj_x, traj_y, speeds = [], [], []
+    env.disturbance_scale = EVAL_NOISE
+    traj_x, traj_y, alphas, speeds = [], [], [], []
     k_nom_speeds, safe_u_speeds = [], []
     dist_list = []
     per_obs_dists = [[], [], []]
@@ -154,9 +163,12 @@ def run_fixed_episode(env, scen):
         for oi in range(3):
             per_obs_dists[oi].append(dists[oi])
 
-        k_nom_before = env._compute_k_nom()
-        dummy_action = np.array([0.0])
-        obs, reward, terminated, truncated, info = env.step(dummy_action)
+        action, _ = model.predict(obs, deterministic=True)
+        alpha_val = float(action[2])
+        alphas.append(alpha_val)
+
+        k_nom_before = np.array([float(action[0]), float(action[1])])
+        obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward
         safe_u = info.get("safe_u", k_nom_before)
         k_nom_speeds.append(np.linalg.norm(k_nom_before))
@@ -178,7 +190,7 @@ def run_fixed_episode(env, scen):
     efficiency = plen / straight_line if straight_line > 0 else 1.0
 
     return {
-        "traj_x": traj_x, "traj_y": traj_y,
+        "traj_x": traj_x, "traj_y": traj_y, "alphas": alphas,
         "speeds": speeds, "k_nom_speeds": k_nom_speeds,
         "safe_u_speeds": safe_u_speeds, "dist": dist_list,
         "per_obs_dists": per_obs_dists,
@@ -215,23 +227,20 @@ if __name__ == "__main__":
     save_dir = "./plots/"
     os.makedirs(save_dir, exist_ok=True)
 
-    print("Loading phi-CBF model...")
-    dyn_env = PhiCBFDynamicEnv()
-    dyn_model = PPO.load(DYNAMIC_MODEL_PATH)
+    print(f"Loading models... (eval noise={EVAL_NOISE})")
+    phi_env = PhiCBFHighNoiseEnv()
+    phi_model = PPO.load(PHI_MODEL_PATH)
 
-    fixed_envs = {}
-    for alpha in FIXED_ALPHAS:
-        fixed_envs[alpha] = FixedAlphaThreeObsEnv(alpha=alpha)
+    ao_env = AlphaOnlyHighNoiseEnv()
+    ao_model = PPO.load(ALPHA_ONLY_MODEL_PATH)
 
     # --- Hand-picked scenarios ---
     print(f"\nRunning {len(SCENARIOS)} hand-picked scenarios...")
     all_scenarios = []
     for scen in SCENARIOS:
-        dyn = run_dynamic_episode(dyn_env, dyn_model, scen)
-        fixed_results = {}
-        for alpha in FIXED_ALPHAS:
-            fixed_results[alpha] = run_fixed_episode(fixed_envs[alpha], scen)
-        all_scenarios.append({"scen": scen, "dyn": dyn, "fixed": fixed_results})
+        phi_result = run_phi_episode(phi_env, phi_model, scen)
+        ao_result = run_alpha_only_episode(ao_env, ao_model, scen)
+        all_scenarios.append({"scen": scen, "phi": phi_result, "ao": ao_result})
 
     # =====================================================================
     # COMBINED PLOT: 7 columns
@@ -243,11 +252,11 @@ if __name__ == "__main__":
     n_scen = len(SCENARIOS)
     fig, axs = plt.subplots(n_scen, 7, figsize=(63, 7 * n_scen),
                             gridspec_kw={"width_ratios": [1.4, 1.2, 1, 1, 1, 1, 1]})
-    fig.suptitle(r"Phi-CBF: Dynamic [kx,ky,$\alpha$,$\varphi$] vs Fixed $\alpha$ + Prop. Control",
+    fig.suptitle(rf"HIGH Noise (noise={EVAL_NOISE}): Dynamic $\alpha$+$\varphi$ (ISSf-CBF) vs Dynamic $\alpha$-only (standard CBF)",
                  fontsize=18, y=1.005)
 
     for i, data in enumerate(all_scenarios):
-        scen, dyn, fixed_results = data["scen"], data["dyn"], data["fixed"]
+        scen, phi, ao = data["scen"], data["phi"], data["ao"]
 
         # --- Column 1: Trajectory ---
         ax = axs[i, 0]
@@ -256,22 +265,22 @@ if __name__ == "__main__":
         ax.add_patch(plt.Circle(scen["target_pos"], scen["target_radius"],
                                 color="green", alpha=0.3))
 
-        for fa in FIXED_ALPHAS:
-            r = fixed_results[fa]
-            ax.plot(r["traj_x"], r["traj_y"], color=FIXED_ALPHA_COLORS[fa],
-                    linewidth=1.5, linestyle="--", alpha=0.6, label=rf"$\alpha$={fa}")
+        # Alpha-only trajectory
+        ax.plot(ao["traj_x"], ao["traj_y"], color=ALPHA_ONLY_COLOR,
+                linewidth=2, linestyle="--", alpha=0.7, label=r"$\alpha$-only (no $\varphi$)")
 
-        dyn_x, dyn_y = dyn["traj_x"], dyn["traj_y"]
+        # Phi trajectory with alpha colormap
+        phi_x, phi_y = phi["traj_x"], phi["traj_y"]
         step_skip = 2
-        sc = ax.scatter(dyn_x[:-1:step_skip], dyn_y[:-1:step_skip],
-                        c=dyn["alphas"][::step_skip], cmap="coolwarm",
-                        vmin=0.1, vmax=5.0, s=14, zorder=5, label=r"Dynamic $\alpha$")
+        sc = ax.scatter(phi_x[:-1:step_skip], phi_y[:-1:step_skip],
+                        c=phi["alphas"][::step_skip], cmap="coolwarm",
+                        vmin=0.1, vmax=5.0, s=14, zorder=5, label=r"$\alpha$+$\varphi$ (ISSf)")
         cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
         cbar.set_label(r"$\alpha$")
 
-        for t in range(0, len(dyn_x) - 1, TIME_MARKER_INTERVAL):
-            ax.plot(dyn_x[t], dyn_y[t], marker='s', color='black', markersize=4, zorder=6)
-            ax.text(dyn_x[t], dyn_y[t] + 0.8, f"t={t}", fontsize=7, color='black',
+        for t in range(0, len(phi_x) - 1, TIME_MARKER_INTERVAL):
+            ax.plot(phi_x[t], phi_y[t], marker='s', color='black', markersize=4, zorder=6)
+            ax.text(phi_x[t], phi_y[t] + 0.8, f"t={t}", fontsize=7, color='black',
                     ha='center', zorder=7)
 
         ax.set_title(f"{scen['name']}", fontsize=11)
@@ -284,13 +293,15 @@ if __name__ == "__main__":
         if i == 0:
             ax.legend(loc="upper left", fontsize=7)
 
-        metrics_lines = []
-        metrics_lines.append(f"{'Method':<10} {'Steps':>5} {'Reward':>7}")
-        metrics_lines.append("-" * 25)
-        for fa in FIXED_ALPHAS:
-            r = fixed_results[fa]
-            metrics_lines.append(f"a={fa:<5.1f}  {r['steps']:>5} {r['total_reward']:>7.0f}")
-        metrics_lines.append(f"{'Dyn':<8}  {dyn['steps']:>5} {dyn['total_reward']:>7.0f}")
+        # Collision/success annotations
+        phi_status = ("REACHED" if phi["reached_target"] else "FAIL") + (" COLLISION" if phi["collided"] else "")
+        ao_status = ("REACHED" if ao["reached_target"] else "FAIL") + (" COLLISION" if ao["collided"] else "")
+        metrics_lines = [
+            f"{'Method':<16} {'Steps':>5} {'Reward':>7} {'Status'}",
+            "-" * 42,
+            f"{'a-only':<16} {ao['steps']:>5} {ao['total_reward']:>7.0f} {ao_status}",
+            f"{'a+phi':<16} {phi['steps']:>5} {phi['total_reward']:>7.0f} {phi_status}",
+        ]
         metrics_text = "\n".join(metrics_lines)
         ax.text(0.02, -0.15, metrics_text, transform=ax.transAxes, fontsize=7,
                 verticalalignment='top', fontfamily='monospace',
@@ -302,25 +313,24 @@ if __name__ == "__main__":
 
         # Obstacle zone shading
         for oi in range(3):
-            d = dyn["per_obs_dists"][oi]
+            d = phi["per_obs_dists"][oi]
             in_zone = np.array(d) < 10.0
             for t_idx in range(len(d)):
                 if in_zone[t_idx]:
                     ax.axvspan(t_idx, t_idx + 1, color=OBS_COLORS[oi], alpha=0.08)
-            # Mark closest approach
             t_min = int(np.argmin(d))
             ax.axvline(t_min, color=OBS_COLORS[oi], linewidth=1.5, linestyle="--", alpha=0.6)
             ax.text(t_min, 5.3, f"{OBS_LABELS[oi]}", fontsize=6,
                     color=OBS_COLORS[oi], ha="center", va="top", fontweight="bold")
 
         # Alpha on left axis
-        ax.plot(dyn["alphas"], color="purple", linewidth=2.5, label=r"$\alpha$", zorder=5)
+        ax.plot(phi["alphas"], color="purple", linewidth=2.5, label=r"$\alpha$", zorder=5)
         ax.set_ylabel(r"$\alpha$ Value", color="purple")
         ax.tick_params(axis="y", labelcolor="purple")
         ax.set_ylim(0, 5.5)
 
         # Phi on right axis
-        ax_phi2.plot(dyn["phis"], color="darkorange", linewidth=2.5, linestyle="-.",
+        ax_phi2.plot(phi["phis"], color="darkorange", linewidth=2.5, linestyle="-.",
                      label=r"$\varphi$", zorder=5)
         ax_phi2.set_ylabel(r"$\varphi$ Value", color="darkorange")
         ax_phi2.tick_params(axis="y", labelcolor="darkorange")
@@ -336,11 +346,9 @@ if __name__ == "__main__":
 
         # --- Column 3: Speed ---
         ax = axs[i, 2]
-        for fa in FIXED_ALPHAS:
-            r = fixed_results[fa]
-            ax.plot(r["speeds"], color=FIXED_ALPHA_COLORS[fa],
-                    linewidth=1.2, linestyle="--", alpha=0.6, label=rf"$\alpha$={fa}")
-        ax.plot(dyn["speeds"], color=DYNAMIC_COLOR, linewidth=2, label=r"Dynamic $\alpha$")
+        ax.plot(ao["speeds"], color=ALPHA_ONLY_COLOR,
+                linewidth=1.5, linestyle="--", alpha=0.7, label=r"$\alpha$-only")
+        ax.plot(phi["speeds"], color=PHI_COLOR, linewidth=2, label=r"$\alpha$+$\varphi$")
         ax.axhline(3.0, color="gray", linewidth=0.8, linestyle=":", alpha=0.4, label="Max (3 m/s)")
         ax.set_title(f"{scen['name']} — Robot Speed", fontsize=11)
         ax.set_xlabel("Time Step")
@@ -353,7 +361,9 @@ if __name__ == "__main__":
         # --- Column 4: Alpha + Per-Obstacle Distance ---
         ax = axs[i, 3]
         ax.set_ylabel(r"$\alpha$ Value", color="purple")
-        ax.plot(dyn["alphas"], color="purple", linewidth=2.5, label=r"$\alpha$", zorder=5)
+        ax.plot(phi["alphas"], color="purple", linewidth=2.5, label=r"$\alpha$ (ISSf)", zorder=5)
+        ax.plot(ao["alphas"], color=ALPHA_ONLY_COLOR, linewidth=1.5, linestyle="--",
+                alpha=0.7, label=r"$\alpha$ (std CBF)", zorder=4)
         ax.tick_params(axis="y", labelcolor="purple")
         ax.set_ylim(0, 5.5)
 
@@ -363,7 +373,7 @@ if __name__ == "__main__":
         ax_dist.axhline(0, color="red", linewidth=1, linestyle=":", alpha=0.5)
 
         for oi in range(3):
-            d = dyn["per_obs_dists"][oi]
+            d = phi["per_obs_dists"][oi]
             ax_dist.plot(d, color=OBS_COLORS[oi], linewidth=1.2, linestyle="-.",
                          alpha=0.7, label=OBS_LABELS[oi])
             t_min = int(np.argmin(d))
@@ -374,9 +384,6 @@ if __name__ == "__main__":
             for t_idx in range(len(d)):
                 if in_zone[t_idx]:
                     ax.axvspan(t_idx, t_idx + 1, color=OBS_COLORS[oi], alpha=0.04)
-
-        for fa in FIXED_ALPHAS:
-            ax.axhline(fa, color=FIXED_ALPHA_COLORS[fa], linewidth=1, linestyle=":", alpha=0.4)
 
         ax.set_title(f"{scen['name']} — Alpha vs Obstacle Proximity", fontsize=11)
         ax.set_xlabel("Time Step")
@@ -389,9 +396,9 @@ if __name__ == "__main__":
         # --- Column 5: Phi + Per-Obstacle Distance ---
         ax = axs[i, 4]
         ax.set_ylabel(r"$\varphi$ Value", color="darkorange")
-        ax.plot(dyn["phis"], color="darkorange", linewidth=2.5, label=r"$\varphi$", zorder=5)
+        ax.plot(phi["phis"], color="darkorange", linewidth=2.5, label=r"$\varphi$", zorder=5)
         ax.tick_params(axis="y", labelcolor="darkorange")
-        ax.set_ylim(-0.7, 2.3)
+        ax.set_ylim(-0.7, 10.5)
         ax.axhline(0, color="gray", linewidth=0.8, linestyle=":", alpha=0.4)
 
         ax_dist2 = ax.twinx()
@@ -400,12 +407,12 @@ if __name__ == "__main__":
         ax_dist2.axhline(0, color="red", linewidth=1, linestyle=":", alpha=0.5)
 
         for oi in range(3):
-            d = dyn["per_obs_dists"][oi]
+            d = phi["per_obs_dists"][oi]
             ax_dist2.plot(d, color=OBS_COLORS[oi], linewidth=1.2, linestyle="-.",
                           alpha=0.7, label=OBS_LABELS[oi])
             t_min = int(np.argmin(d))
             ax.axvline(t_min, color=OBS_COLORS[oi], linewidth=1.5, linestyle="--", alpha=0.6)
-            ax.text(t_min, 2.1, f"{OBS_LABELS[oi]}\nt={t_min}", fontsize=6,
+            ax.text(t_min, 10.0, f"{OBS_LABELS[oi]}\nt={t_min}", fontsize=6,
                     color=OBS_COLORS[oi], ha="center", va="top", fontweight="bold")
             in_zone = np.array(d) < 10.0
             for t_idx in range(len(d)):
@@ -423,8 +430,8 @@ if __name__ == "__main__":
         # --- Column 6: Speed + Alpha + Phi overlay ---
         ax = axs[i, 5]
         ax.set_ylabel("Speed (m/s)", color="teal")
-        ax.plot(dyn["safe_u_speeds"], color="teal", linewidth=2, label=r"$\|u_{safe}\|$")
-        ax.plot(dyn["k_nom_speeds"], color="teal", linewidth=1, linestyle=":",
+        ax.plot(phi["safe_u_speeds"], color="teal", linewidth=2, label=r"$\|u_{safe}\|$")
+        ax.plot(phi["k_nom_speeds"], color="teal", linewidth=1, linestyle=":",
                 alpha=0.5, label=r"$\|k_{nom}\|$")
         ax.axhline(3.0, color="gray", linewidth=0.8, linestyle=":", alpha=0.3)
         ax.tick_params(axis="y", labelcolor="teal")
@@ -432,14 +439,14 @@ if __name__ == "__main__":
 
         ax_ap = ax.twinx()
         ax_ap.set_ylabel(r"$\alpha$ / $\varphi$")
-        ax_ap.plot(dyn["alphas"], color="purple", linewidth=1.5, linestyle="--",
+        ax_ap.plot(phi["alphas"], color="purple", linewidth=1.5, linestyle="--",
                    alpha=0.7, label=r"$\alpha$")
-        ax_ap.plot(dyn["phis"], color="darkorange", linewidth=1.5, linestyle="-.",
+        ax_ap.plot(phi["phis"], color="darkorange", linewidth=1.5, linestyle="-.",
                    alpha=0.7, label=r"$\varphi$")
-        ax_ap.set_ylim(-1, 5.5)
+        ax_ap.set_ylim(-1, 10.5)
 
-        for t_idx in range(len(dyn["dist"])):
-            if dyn["dist"][t_idx] < 8.0:
+        for t_idx in range(len(phi["dist"])):
+            if phi["dist"][t_idx] < 8.0:
                 ax.axvspan(t_idx, t_idx + 1, color="red", alpha=0.05)
 
         ax.set_title(f"{scen['name']} — Speed + Alpha + Phi", fontsize=11)
@@ -452,9 +459,9 @@ if __name__ == "__main__":
 
         # --- Column 7: Policy Map (alpha & phi vs distance) ---
         ax = axs[i, 6]
-        min_dists_per_t = np.array(dyn["dist"])
-        alphas_arr = np.array(dyn["alphas"])
-        phis_arr = np.array(dyn["phis"])
+        min_dists_per_t = np.array(phi["dist"])
+        alphas_arr = np.array(phi["alphas"])
+        phis_arr = np.array(phi["phis"])
 
         ax.scatter(min_dists_per_t, alphas_arr,
                    c="purple", s=10, alpha=0.5, zorder=3, label=r"$\alpha$")
@@ -463,7 +470,7 @@ if __name__ == "__main__":
 
         ax.set_xlabel("Min Dist to Obs Surface (m)")
         ax.set_ylabel(r"$\alpha$ / $\varphi$")
-        ax.set_ylim(-1, 5.5)
+        ax.set_ylim(-1, 10.5)
         ax.set_xlim(-1, max(min_dists_per_t) * 1.05)
         ax.axvline(0, color="red", linewidth=1, linestyle=":", alpha=0.5, label="Collision boundary")
         ax.axhline(0, color="gray", linewidth=0.8, linestyle=":", alpha=0.3)
@@ -482,8 +489,8 @@ if __name__ == "__main__":
     print(f"\nRunning {N_RANDOM_SCENARIOS} random scenarios...")
     random_scenarios = generate_random_scenarios(N_RANDOM_SCENARIOS)
 
-    methods = [rf"$\alpha$={a}" for a in FIXED_ALPHAS] + [r"Dynamic $\alpha$+$\varphi$"]
-    method_colors = [FIXED_ALPHA_COLORS[a] for a in FIXED_ALPHAS] + [DYNAMIC_COLOR]
+    methods = [r"$\alpha$-only (std CBF)", r"$\alpha$+$\varphi$ (ISSf-CBF)"]
+    method_colors = [ALPHA_ONLY_COLOR, PHI_COLOR]
     agg = {m: {"success": 0, "collisions": 0, "min_clearances": [], "efficiencies": [],
                "steps": [], "avg_speeds": []}
            for m in methods}
@@ -492,31 +499,30 @@ if __name__ == "__main__":
         if (idx + 1) % 20 == 0:
             print(f"  {idx + 1}/{N_RANDOM_SCENARIOS}...")
 
-        dyn = run_dynamic_episode(dyn_env, dyn_model, scen)
-        m_dyn = methods[-1]
-        agg[m_dyn]["success"] += int(dyn["reached_target"])
-        agg[m_dyn]["collisions"] += int(dyn["collided"])
-        agg[m_dyn]["min_clearances"].append(dyn["min_clearance"])
-        agg[m_dyn]["efficiencies"].append(dyn["path_efficiency"])
-        agg[m_dyn]["steps"].append(dyn["steps"])
-        agg[m_dyn]["avg_speeds"].append(np.mean(dyn["speeds"]))
+        phi_r = run_phi_episode(phi_env, phi_model, scen)
+        m_phi = methods[1]
+        agg[m_phi]["success"] += int(phi_r["reached_target"])
+        agg[m_phi]["collisions"] += int(phi_r["collided"])
+        agg[m_phi]["min_clearances"].append(phi_r["min_clearance"])
+        agg[m_phi]["efficiencies"].append(phi_r["path_efficiency"])
+        agg[m_phi]["steps"].append(phi_r["steps"])
+        agg[m_phi]["avg_speeds"].append(np.mean(phi_r["speeds"]))
 
-        for j, fa in enumerate(FIXED_ALPHAS):
-            r = run_fixed_episode(fixed_envs[fa], scen)
-            m = methods[j]
-            agg[m]["success"] += int(r["reached_target"])
-            agg[m]["collisions"] += int(r["collided"])
-            agg[m]["min_clearances"].append(r["min_clearance"])
-            agg[m]["efficiencies"].append(r["path_efficiency"])
-            agg[m]["steps"].append(r["steps"])
-            agg[m]["avg_speeds"].append(np.mean(r["speeds"]))
+        ao_r = run_alpha_only_episode(ao_env, ao_model, scen)
+        m_ao = methods[0]
+        agg[m_ao]["success"] += int(ao_r["reached_target"])
+        agg[m_ao]["collisions"] += int(ao_r["collided"])
+        agg[m_ao]["min_clearances"].append(ao_r["min_clearance"])
+        agg[m_ao]["efficiencies"].append(ao_r["path_efficiency"])
+        agg[m_ao]["steps"].append(ao_r["steps"])
+        agg[m_ao]["avg_speeds"].append(np.mean(ao_r["speeds"]))
 
     # =====================================================================
     # AGGREGATE METRICS PLOT
     # =====================================================================
     n_methods = len(methods)
-    fig, axs = plt.subplots(2, 3, figsize=(20, 10))
-    fig.suptitle(rf"Aggregate — Phi-CBF ({N_RANDOM_SCENARIOS} Random Scenarios)",
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+    fig.suptitle(rf"Aggregate — HIGH Noise (noise={EVAL_NOISE}): $\alpha$+$\varphi$ vs $\alpha$-only ({N_RANDOM_SCENARIOS} Random Scenarios)",
                  fontsize=16)
     x = np.arange(n_methods)
 
@@ -525,65 +531,65 @@ if __name__ == "__main__":
     bars = ax.bar(x, vals, color=method_colors, alpha=0.8, edgecolor="black")
     ax.set_ylabel("Success Rate (%)")
     ax.set_title("Target Reached")
-    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=9)
     ax.set_ylim(0, 110)
     for bar, val in zip(bars, vals):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 2,
-                f"{val:.0f}%", ha="center", fontsize=9, fontweight="bold")
+                f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
 
     ax = axs[0, 1]
     vals = [agg[m]["collisions"] / N_RANDOM_SCENARIOS * 100 for m in methods]
     bars = ax.bar(x, vals, color=method_colors, alpha=0.8, edgecolor="black")
     ax.set_ylabel("Collision Rate (%)")
     ax.set_title("Safety Violations")
-    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=9)
     ax.set_ylim(0, max(max(vals) * 1.3, 10))
     for bar, val in zip(bars, vals):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-                f"{val:.0f}%", ha="center", fontsize=9, fontweight="bold")
+                f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
 
     ax = axs[0, 2]
     vals = [np.mean(agg[m]["min_clearances"]) for m in methods]
     bars = ax.bar(x, vals, color=method_colors, alpha=0.8, edgecolor="black")
     ax.set_ylabel("Avg Min Clearance (m)")
     ax.set_title("Safety Margin")
-    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=9)
     ax.axhline(0, color="red", linewidth=1, linestyle=":")
     for bar, val in zip(bars, vals):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
-                f"{val:.2f}", ha="center", fontsize=9)
+                f"{val:.2f}", ha="center", fontsize=10)
 
     ax = axs[1, 0]
     vals = [np.mean(agg[m]["efficiencies"]) for m in methods]
     bars = ax.bar(x, vals, color=method_colors, alpha=0.8, edgecolor="black")
     ax.set_ylabel("Path Length / Straight-Line")
     ax.set_title("Path Efficiency")
-    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=9)
     ax.axhline(1.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
     for bar, val in zip(bars, vals):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
-                f"{val:.2f}", ha="center", fontsize=9)
+                f"{val:.2f}", ha="center", fontsize=10)
 
     ax = axs[1, 1]
     vals = [np.mean(agg[m]["steps"]) for m in methods]
     bars = ax.bar(x, vals, color=method_colors, alpha=0.8, edgecolor="black")
     ax.set_ylabel("Avg Steps")
     ax.set_title("Episode Length (lower = faster)")
-    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=9)
     for bar, val in zip(bars, vals):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                f"{val:.0f}", ha="center", fontsize=9)
+                f"{val:.0f}", ha="center", fontsize=10)
 
     ax = axs[1, 2]
     vals = [np.mean(agg[m]["avg_speeds"]) for m in methods]
     bars = ax.bar(x, vals, color=method_colors, alpha=0.8, edgecolor="black")
     ax.set_ylabel("Avg Speed (m/s)")
     ax.set_title("Average Robot Speed")
-    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(methods, fontsize=9)
     ax.axhline(3.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
     for bar, val in zip(bars, vals):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
-                f"{val:.2f}", ha="center", fontsize=9)
+                f"{val:.2f}", ha="center", fontsize=10)
 
     fig.tight_layout()
     fig.savefig(os.path.join(save_dir, "aggregate_metrics.png"), bbox_inches="tight", dpi=150)
@@ -593,38 +599,36 @@ if __name__ == "__main__":
     # =====================================================================
     # Console summary
     # =====================================================================
-    print(f"\n{'='*115}")
-    print("HAND-PICKED SCENARIO RESULTS")
-    print(f"{'='*115}")
-    print(f"{'Scenario':<25} {'Method':<18} {'Reached':>8} {'Collided':>9} "
+    print(f"\n{'='*100}")
+    print(f"HAND-PICKED SCENARIO RESULTS (noise={EVAL_NOISE})")
+    print(f"{'='*100}")
+    print(f"{'Scenario':<25} {'Method':<20} {'Reached':>8} {'Collided':>9} "
           f"{'MinDist':>9} {'Steps':>7} {'AvgSpd':>8} {'PathEff':>9}")
-    print(f"{'-'*115}")
+    print(f"{'-'*100}")
 
     for data in all_scenarios:
-        scen, dyn, fixed_results = data["scen"], data["dyn"], data["fixed"]
-        for alpha in FIXED_ALPHAS:
-            r = fixed_results[alpha]
-            print(f"{scen['name']:<25} {'Fixed a=' + str(alpha):<18} "
-                  f"{'Yes' if r['reached_target'] else 'No':>8} "
-                  f"{'YES' if r['collided'] else 'No':>9} "
-                  f"{r['min_clearance']:>9.3f} {r['steps']:>7} "
-                  f"{np.mean(r['speeds']):>8.2f} {r['path_efficiency']:>9.2f}")
-        print(f"{scen['name']:<25} {'Dynamic':<18} "
-              f"{'Yes' if dyn['reached_target'] else 'No':>8} "
-              f"{'YES' if dyn['collided'] else 'No':>9} "
-              f"{dyn['min_clearance']:>9.3f} {dyn['steps']:>7} "
-              f"{np.mean(dyn['speeds']):>8.2f} {dyn['path_efficiency']:>9.2f}")
+        scen, phi, ao = data["scen"], data["phi"], data["ao"]
+        print(f"{scen['name']:<25} {'alpha-only':<20} "
+              f"{'Yes' if ao['reached_target'] else 'No':>8} "
+              f"{'YES' if ao['collided'] else 'No':>9} "
+              f"{ao['min_clearance']:>9.3f} {ao['steps']:>7} "
+              f"{np.mean(ao['speeds']):>8.2f} {ao['path_efficiency']:>9.2f}")
+        print(f"{scen['name']:<25} {'alpha+phi':<20} "
+              f"{'Yes' if phi['reached_target'] else 'No':>8} "
+              f"{'YES' if phi['collided'] else 'No':>9} "
+              f"{phi['min_clearance']:>9.3f} {phi['steps']:>7} "
+              f"{np.mean(phi['speeds']):>8.2f} {phi['path_efficiency']:>9.2f}")
         print()
 
-    print(f"{'='*115}")
+    print(f"{'='*100}")
     print(f"AGGREGATE ({N_RANDOM_SCENARIOS} RANDOM SCENARIOS)")
-    print(f"{'='*115}")
-    print(f"{'Method':<18} {'Success':>10} {'Collisions':>11} {'AvgMinDist':>11} "
+    print(f"{'='*100}")
+    print(f"{'Method':<25} {'Success':>10} {'Collisions':>11} {'AvgMinDist':>11} "
           f"{'AvgSteps':>9} {'AvgSpeed':>9} {'AvgPathEff':>11}")
-    print(f"{'-'*115}")
+    print(f"{'-'*100}")
     for m in methods:
         a = agg[m]
-        print(f"{m:<18} {a['success']:>8}/{N_RANDOM_SCENARIOS} "
+        print(f"{m:<25} {a['success']:>8}/{N_RANDOM_SCENARIOS} "
               f"{a['collisions']:>9}/{N_RANDOM_SCENARIOS} "
               f"{np.mean(a['min_clearances']):>11.3f} {np.mean(a['steps']):>9.1f} "
               f"{np.mean(a['avg_speeds']):>9.2f} {np.mean(a['efficiencies']):>11.2f}")

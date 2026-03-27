@@ -3,7 +3,7 @@ Phi-CBF + Disturbance ablation: dynamic [kx,ky,alpha,phi] (trained with noise)
 vs fixed alpha + proportional k_nom (both evaluated with noise).
 
 Outputs:
-  plots/combined_scenarios.png  (6-col: traj | speed | alpha+dist | phi+dist | speed+alpha+phi | policy map)
+  plots/combined_scenarios.png  (7-col: traj | alpha+phi+obs_zone | speed | alpha+dist | phi+dist | speed+alpha+phi | policy map)
   plots/aggregate_metrics.png
 """
 import numpy as np
@@ -236,14 +236,15 @@ if __name__ == "__main__":
         all_scenarios.append({"scen": scen, "dyn": dyn, "fixed": fixed_results})
 
     # =====================================================================
-    # COMBINED PLOT: 6 columns
+    # COMBINED PLOT: 7 columns
+    # Traj | Alpha+Phi+ObsZone | Speed | Alpha+Dist | Phi+Dist | Speed+Alpha+Phi | Policy Map
     # =====================================================================
     TIME_MARKER_INTERVAL = 50
     OBS_COLORS = ["#e74c3c", "#e67e22", "#9b59b6"]
     OBS_LABELS = ["Obs 1", "Obs 2", "Obs 3"]
     n_scen = len(SCENARIOS)
-    fig, axs = plt.subplots(n_scen, 6, figsize=(56, 7 * n_scen),
-                            gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
+    fig, axs = plt.subplots(n_scen, 7, figsize=(63, 7 * n_scen),
+                            gridspec_kw={"width_ratios": [1.4, 1.2, 1, 1, 1, 1, 1]})
     fig.suptitle(rf"Phi-CBF + Disturbance (noise={EVAL_NOISE}): Dynamic [kx,ky,$\alpha$,$\varphi$] vs Fixed $\alpha$",
                  fontsize=18, y=1.005)
 
@@ -297,8 +298,46 @@ if __name__ == "__main__":
                 verticalalignment='top', fontfamily='monospace',
                 bbox=dict(boxstyle='round,pad=0.4', facecolor='lightyellow', alpha=0.9))
 
-        # --- Column 2: Speed ---
+        # --- Column 2: Alpha & Phi with Obstacle Zones ---
         ax = axs[i, 1]
+        ax_phi2 = ax.twinx()
+
+        # Obstacle zone shading
+        for oi in range(3):
+            d = dyn["per_obs_dists"][oi]
+            in_zone = np.array(d) < 10.0
+            for t_idx in range(len(d)):
+                if in_zone[t_idx]:
+                    ax.axvspan(t_idx, t_idx + 1, color=OBS_COLORS[oi], alpha=0.08)
+            # Mark closest approach
+            t_min = int(np.argmin(d))
+            ax.axvline(t_min, color=OBS_COLORS[oi], linewidth=1.5, linestyle="--", alpha=0.6)
+            ax.text(t_min, 5.3, f"{OBS_LABELS[oi]}", fontsize=6,
+                    color=OBS_COLORS[oi], ha="center", va="top", fontweight="bold")
+
+        # Alpha on left axis
+        ax.plot(dyn["alphas"], color="purple", linewidth=2.5, label=r"$\alpha$", zorder=5)
+        ax.set_ylabel(r"$\alpha$ Value", color="purple")
+        ax.tick_params(axis="y", labelcolor="purple")
+        ax.set_ylim(0, 5.5)
+
+        # Phi on right axis
+        ax_phi2.plot(dyn["phis"], color="darkorange", linewidth=2.5, linestyle="-.",
+                     label=r"$\varphi$", zorder=5)
+        ax_phi2.set_ylabel(r"$\varphi$ Value", color="darkorange")
+        ax_phi2.tick_params(axis="y", labelcolor="darkorange")
+        ax_phi2.set_ylim(-0.5, 10.5)
+
+        ax.set_title(f"{scen['name']} — Alpha & Phi (Obs Zones)", fontsize=11)
+        ax.set_xlabel("Time Step")
+        ax.grid(True, alpha=0.3)
+        if i == 0:
+            lines1, labels1 = ax.get_legend_handles_labels()
+            lines2, labels2 = ax_phi2.get_legend_handles_labels()
+            ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
+
+        # --- Column 3: Speed ---
+        ax = axs[i, 2]
         for fa in FIXED_ALPHAS:
             r = fixed_results[fa]
             ax.plot(r["speeds"], color=FIXED_ALPHA_COLORS[fa],
@@ -313,8 +352,8 @@ if __name__ == "__main__":
         if i == 0:
             ax.legend(loc="upper right", fontsize=7)
 
-        # --- Column 3: Alpha + Per-Obstacle Distance ---
-        ax = axs[i, 2]
+        # --- Column 4: Alpha + Per-Obstacle Distance ---
+        ax = axs[i, 3]
         ax.set_ylabel(r"$\alpha$ Value", color="purple")
         ax.plot(dyn["alphas"], color="purple", linewidth=2.5, label=r"$\alpha$", zorder=5)
         ax.tick_params(axis="y", labelcolor="purple")
@@ -349,8 +388,8 @@ if __name__ == "__main__":
             lines2, labels2 = ax_dist.get_legend_handles_labels()
             ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
 
-        # --- Column 4: Phi + Per-Obstacle Distance ---
-        ax = axs[i, 3]
+        # --- Column 5: Phi + Per-Obstacle Distance ---
+        ax = axs[i, 4]
         ax.set_ylabel(r"$\varphi$ Value", color="darkorange")
         ax.plot(dyn["phis"], color="darkorange", linewidth=2.5, label=r"$\varphi$", zorder=5)
         ax.tick_params(axis="y", labelcolor="darkorange")
@@ -383,8 +422,8 @@ if __name__ == "__main__":
             lines2, labels2 = ax_dist2.get_legend_handles_labels()
             ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
 
-        # --- Column 5: Speed + Alpha + Phi overlay ---
-        ax = axs[i, 4]
+        # --- Column 6: Speed + Alpha + Phi overlay ---
+        ax = axs[i, 5]
         ax.set_ylabel("Speed (m/s)", color="teal")
         ax.plot(dyn["safe_u_speeds"], color="teal", linewidth=2, label=r"$\|u_{safe}\|$")
         ax.plot(dyn["k_nom_speeds"], color="teal", linewidth=1, linestyle=":",
@@ -413,8 +452,8 @@ if __name__ == "__main__":
             lines2, labels2 = ax_ap.get_legend_handles_labels()
             ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7)
 
-        # --- Column 6: Policy Map (alpha & phi vs distance) ---
-        ax = axs[i, 5]
+        # --- Column 7: Policy Map (alpha & phi vs distance) ---
+        ax = axs[i, 6]
         min_dists_per_t = np.array(dyn["dist"])
         alphas_arr = np.array(dyn["alphas"])
         phis_arr = np.array(dyn["phis"])

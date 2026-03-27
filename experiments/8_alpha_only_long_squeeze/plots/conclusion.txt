@@ -1,0 +1,79 @@
+TLDR: Large scale (100m, r=5 obstacles) crushes alpha=0.1 (26% success — 30m crawl
+zones cause timeouts). Dynamic alpha matches alpha=5.0 speed (~2.85 m/s). Confirms
+dynamic alpha's value scales with CBF influence zone size.
+
+Experiment 8: Alpha Only — Long Squeeze (100m Map, Large Obstacles)
+===================================================================
+
+Question:
+Does dynamic alpha provide a larger advantage on a long course with big obstacles?
+Experiments 6-7 used a small 10m map with radius=1 obstacles. Here we scale to 100m
+with radius=5 obstacles, creating ~30m CBF influence zones. With a fixed low alpha,
+the robot crawls through these zones for a long time, making the speed penalty of
+conservative alpha much more severe. Can dynamic alpha exploit this larger scale to
+show a clearer advantage?
+
+Setup:
+- Dynamic agent: [alpha] action space only (alpha in [0.1, 5.0])
+- Steering: fixed proportional go-to-goal controller (k_nom = 3.0 * dir_to_target)
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with same proportional steering
+- 2 obstacles (radius=5.0 each) straddling the direct path, creating a wide gate
+  - Gate at x in [35,65], offset ±[5.5, 8.0] from path centerline
+  - Surface gap ranges from 1.0m to 6.0m
+- Target at x=100, y in [-5,5], radius in [1.5,3.0]
+- 100m map, single-integrator dynamics, 1.5M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (9 hand-picked):
+  - Dynamic alpha navigates all scenarios on the 100m course successfully.
+  - Robot speed (col 2) shows a longer, more pronounced V-shaped dip through the
+    gate zone compared to exp 7 — the large obstacles create a ~30m zone where
+    the CBF is active.
+  - Alpha (col 3) shows the same gate-entry spike pattern but sustained over a
+    longer duration. Alpha ramps up as the robot enters the influence zone and
+    stays high through the bottleneck.
+  - In "Offset Squeeze" scenarios where the gate is off-center, the alpha profile
+    is asymmetric — adapting to which obstacle is closer.
+
+- Alpha Adaptation Details:
+  - The characteristic alpha spike at the gate is longer in duration (matching the
+    ~30m influence zone) but similar in magnitude to exp 7.
+  - Before and after the gate zone, alpha is moderate (~1-2), which is efficient
+    since no CBF is active at those distances.
+  - The agent shows anticipatory behavior — alpha starts rising before entering
+    the gate, suggesting it learned the obstacle geometry from observations.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 26% (severe degradation), alpha=0.5/1.0/5.0 100%,
+    Dynamic 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: all methods ~1.14-1.36m, relatively similar. The large obstacles
+    (r=5) create gentler CBF gradients so margins are more uniform.
+  - Path Efficiency: all methods ~0.98-0.99, very direct paths.
+  - Episode Length: alpha=0.1 ~533 steps (very slow), Dynamic ~311 steps,
+    alpha=5.0 ~301 steps. Dynamic is nearly as fast as the most aggressive baseline
+    and ~40% faster than alpha=0.1.
+  - Average Speed: alpha=0.1 ~1.0 m/s, Dynamic ~2.85 m/s, alpha=5.0 ~2.85 m/s.
+
+Conclusion:
+The long squeeze dramatically amplifies the failure of alpha=0.1 — only 26% success
+(down from 100% in exp 7) because the 30m CBF zone at low alpha slows the robot to a
+crawl, causing widespread timeouts. Dynamic alpha matches alpha=5.0 in speed (~2.85
+m/s) and episode length (~311 steps) while maintaining 0% collisions.
+
+The larger scale confirms that dynamic alpha's value scales with the CBF influence
+zone size. Small obstacles (r=1) on short maps don't penalize conservative alpha
+enough for dynamic alpha to show a clear win over fixed high alpha. But with r=5
+obstacles on a 100m course, the cost of unnecessary CBF throttling is severe, and
+dynamic alpha avoids it entirely by learning to raise alpha through the gate.
+
+However, the dynamic agent doesn't differentiate from alpha=5.0 here — both achieve
+identical performance. The squeeze gate geometry still doesn't require temporal alpha
+adaptation (the answer is always "use high alpha at the gate"). A slalom layout with
+sequential obstacles would better test whether the agent can learn per-obstacle alpha
+strategies.
+
+Future Steps:
+- Move to 3-obstacle slalom on 100m map with [kx, ky, alpha] (exp 9) — requires
+  true per-obstacle alpha adaptation and steering coordination.
+- Test alpha-only on the slalom layout (exp 10).

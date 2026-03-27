@@ -1,0 +1,57 @@
+TLDR: when in multiple OBS exist, does alpha still dies out slowly?
+
+Experiment 2: Multi Obstacle (2 Obstacles)
+==========================================
+
+Question:
+Does dynamic alpha scale from 1 obstacle to 2? With two CBF constraints active
+simultaneously, the QP feasible region shrinks. Can the RL agent still learn a
+useful alpha adaptation strategy when navigating between two obstacles?
+
+Setup:
+- Dynamic agent: [alpha, kx, ky] action space (alpha in [0.1, 5.0], kx/ky in [-2, 2])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 2 obstacles (radius=1.0 each): obs1 at x in [2,5], obs2 at x in [5.5,8.5]
+- Target at x=10, randomized y in [-4,4], radius in [0.5,2.0]
+- Single-integrator dynamics, 900K PPO timesteps, 8 parallel envs
+- Reward: progress (50x), time penalty (-0.5), lateral penalty (-0.1*|ky|)
+
+Observations:
+- Trajectories (9 hand-picked scenarios):
+  - Dynamic alpha navigates around both obstacles successfully in all scenarios.
+  - Alpha color along trajectories shows two distinct adaptation events — one per
+    obstacle — with alpha dropping as the robot approaches each obstacle and
+    recovering in between.
+  - Fixed alpha baselines all reach the target in most scenarios. The trajectories
+    diverge more when obstacles are tightly spaced (e.g., "Tight Corridor").
+
+- Alpha Adaptation:
+  - Two clear alpha dips are visible in the time series, one for each obstacle.
+  - The dip depth and duration scale with how close the robot passes to each obstacle.
+  - Between obstacles, alpha recovers toward higher values, showing the agent
+    learned per-obstacle modulation rather than a blanket conservative strategy.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 68%, alpha=0.5 99%, alpha=1.0/5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~2.49m, alpha=0.5 ~1.68m, Dynamic ~0.90m,
+    alpha=5.0 ~0.68m. Dynamic sits between alpha=1.0 and alpha=5.0.
+  - Path Efficiency: alpha=0.1 ~1.24 (large detours), Dynamic ~0.97, near-optimal.
+
+Conclusion:
+Dynamic alpha scales cleanly from 1 to 2 obstacles. The agent learns per-obstacle
+alpha modulation — lowering alpha independently as each obstacle is encountered,
+then recovering speed in between. 100% success rate with 0% collisions and near-
+optimal path efficiency. The gap between dynamic and fixed alpha widens with 2
+obstacles: alpha=0.1 drops to 68% success (from 76% in exp 1), while dynamic
+maintains 100%.
+
+The safety margin (~0.90m) is tighter than exp 1 (~1.27m), reflecting the more
+constrained environment. The agent trades margin for efficiency, which is the
+correct tradeoff when the CBF guarantees safety regardless.
+
+Future Steps:
+- Add reward shaping for alpha (exp 3) — does an explicit alpha bonus help?
+- Add CBF intervention penalty (exp 5) — does penalizing QP corrections lead to
+  better preemptive behavior?
+- Scale to 3 obstacles on a larger map (exp 9).

@@ -1,0 +1,74 @@
+TLDR: Alpha-only through squeeze gate — 2x faster than alpha=0.1 but identical to
+alpha=5.0. All methods hit 100% success. Squeeze gate doesn't differentiate dynamic
+from high fixed alpha; the answer is always "raise alpha at the gate."
+
+Experiment 7: Alpha Only — Squeeze Gate (2 Obstacles)
+=====================================================
+
+Question:
+Can alpha-only control handle a squeeze gate where two obstacles straddle the direct
+path to the target? With a fixed proportional controller pointing straight at the
+target, the robot must pass between two obstacles. Both CBF constraints are active
+simultaneously, squeezing the feasible velocity set. Can dynamic alpha alone manage
+this bottleneck better than any fixed alpha?
+
+Setup:
+- Dynamic agent: [alpha] action space only (alpha in [0.1, 5.0])
+- Steering: fixed proportional go-to-goal controller (k_nom = 2.0 * dir_to_target)
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with same proportional steering
+- 2 obstacles (radius=1.0) straddling the direct path, creating a gate
+  - Gate formed at x in [4,6], obstacles offset ±[1.3, 2.0] from path centerline
+  - Surface gap ranges from 0.6m to 2.0m
+- Target at x=10, y in [-1.5,1.5], radius in [0.5,1.5]
+- Single-integrator dynamics, 900K PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (9 hand-picked):
+  - Dynamic alpha navigates all squeeze gates successfully.
+  - Robot speed (col 2) shows a characteristic V-shaped dip through the gate —
+    speed drops as both CBFs activate, then recovers after passing through.
+  - Alpha (col 3) shows sharp spikes as the robot enters the gate. Higher alpha
+    at the bottleneck relaxes the CBF constraints, allowing the robot to maintain
+    more speed through the narrow gap.
+  - In tighter gates, the alpha spike is larger. In wider gates, alpha stays more
+    moderate — the agent adapts to gap width.
+  - "Obstacle Align" and "Squeeze(ish)" scenarios show the agent handling different
+    gate geometries.
+
+- Alpha Adaptation Details:
+  - Alpha rises sharply as the robot enters the gate (counterintuitive but correct:
+    higher alpha = less CBF throttling = more speed through the bottleneck).
+  - After exiting the gate, alpha drops back to moderate levels.
+  - The agent learned that in a squeeze, the bottleneck is the performance killer,
+    so it maximizes throughput by raising alpha during the critical pass-through.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: all methods 100% including alpha=0.1.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~1.0m (highest), alpha=0.5 ~0.93m, Dynamic ~0.64m,
+    alpha=5.0 ~0.64m. Dynamic matches the most aggressive baseline.
+  - Path Efficiency: all methods ~0.91. With fixed steering through a gate,
+    path shape is determined by the geometry.
+  - Episode Length: alpha=0.1 ~98 steps (slowest), Dynamic ~70 steps (fastest
+    along with alpha=5.0). Dynamic is ~30% faster than conservative baselines.
+  - Average Speed: alpha=0.1 ~0.75 m/s, Dynamic ~1.50 m/s, alpha=5.0 ~1.50 m/s.
+
+Conclusion:
+Alpha-only control works well in the squeeze gate setting. The dynamic agent matches
+the speed and efficiency of alpha=5.0 while maintaining 0% collisions. The key
+behavior learned is to raise alpha at the bottleneck to maximize throughput speed.
+
+Interestingly, even alpha=0.1 achieves 100% success here (unlike exp 6's 91%) —
+the squeeze gate is geometrically simpler (straight line through the gate) than the
+single-obstacle dodge, so the proportional controller handles it well at any alpha.
+The difference is entirely in speed: dynamic alpha is 2x faster than alpha=0.1.
+
+The squeeze gate doesn't really differentiate dynamic from high fixed alpha. The
+agent essentially learns "always use high alpha" since the proportional controller
+handles steering. A more interesting test is whether dynamic alpha helps with the
+*timing* of alpha changes across multiple sequential obstacles.
+
+Future Steps:
+- Scale to large map with big obstacles (exp 8) where the CBF influence zone is much
+  larger, making the speed penalty of low alpha much more severe.
+- Test 3-obstacle slalom with alpha only (exp 10).

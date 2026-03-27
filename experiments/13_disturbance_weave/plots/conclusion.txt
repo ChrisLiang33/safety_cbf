@@ -1,0 +1,71 @@
+TLDR: Additive noise (up to 0.1 m/s) doesn't break the policy. 100% success, 0%
+collisions. Tighter safety margin (0.93m vs 1.43m) due to noise pushing robot closer
+to obstacles. Domain randomization produces robust policy. Standard CBF absorbs
+small disturbances without needing ISSf-CBF.
+
+Experiment 13: Disturbance Weave (3 Obstacles + Noise)
+======================================================
+
+Question:
+Does the dynamic alpha agent remain robust when additive disturbance noise corrupts
+the robot's dynamics? The standard CBF assumes perfect dynamics (x_dot = u), but
+real systems have model uncertainty. Here we add uniform noise to the position update:
+x += safe_u * dt + noise * dt, where noise ~ U(-scale, scale). The disturbance scale
+is domain-randomized per episode (0.0 to 0.1 m/s), so the agent must learn a policy
+that works across varying noise levels.
+
+Setup:
+- Dynamic agent: [kx, ky, alpha] action space (kx/ky in [-3, 3], alpha in [0.1, 5.0])
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with learned [kx, ky] steering
+- 3 obstacles (radius=5.0 each), same slalom layout as exp 9
+- Disturbance: uniform noise, scale domain-randomized in [0.0, 0.1] per episode
+- Evaluation at fixed noise=0.05
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (8 hand-picked):
+  - Dynamic alpha successfully weaves through all scenarios despite the noise.
+  - Trajectories show slightly more jagged paths compared to exp 9 due to the
+    disturbance, but the overall weaving structure is preserved.
+  - Robot speed profiles are similar to exp 9 — three dips at each obstacle.
+  - Alpha shows the same three-spike pattern, robust to the noise perturbation.
+  - Alpha-vs-distance relationship is preserved despite the stochastic dynamics.
+
+- Alpha Adaptation Details:
+  - The alpha spikes are similar to exp 9 in magnitude and timing.
+  - The agent doesn't appear to be significantly more conservative despite the
+    noise — it trusts the CBF to handle small perturbations.
+  - The domain randomization during training (noise in [0, 0.1]) appears to have
+    produced a robust policy that doesn't overreact to disturbance.
+
+- Aggregate Metrics (100 random scenarios, noise=0.05):
+  - Target Reached: alpha=0.1 ~21%, alpha=0.5/1.0/5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods. The CBF still prevents collisions
+    even with disturbance at this scale.
+  - Safety Margin: Dynamic ~0.93m (tighter than exp 9's ~1.43m). The noise
+    occasionally pushes the robot closer to obstacles.
+  - Path Efficiency: Dynamic ~0.98, same as without noise.
+  - Episode Length: Dynamic ~367 steps, essentially identical to exp 9's ~369.
+  - Average Speed: Dynamic ~2.01 m/s, matching exp 9.
+
+Conclusion:
+The dynamic alpha policy is robust to additive disturbance at the tested noise levels.
+Performance metrics are nearly identical to exp 9 (no noise): same success rate
+(100%), same speed (~2.0 m/s), same path efficiency (~0.98). The only notable
+difference is a tighter safety margin (0.93m vs 1.43m), which is expected since the
+noise can push the robot closer to obstacle boundaries unpredictably.
+
+The 0% collision rate despite noise confirms that the standard CBF constraint
+(Lgh @ u >= -alpha * h(x)) is robust to small disturbances in practice, even though
+it doesn't explicitly account for them. The noise scale (0.05 m/s * 0.1s = 0.005m
+per step) is small relative to the obstacle radii (5m), so the CBF has sufficient
+margin to absorb it.
+
+The domain randomization strategy (training with noise in [0, 0.1]) was effective —
+the agent learned a general policy rather than overfitting to a specific noise level.
+
+Future Steps:
+- Test ISSf-CBF with learnable phi (exp 14) on the noise-free version — can phi
+  provide an explicit robustness margin?
+- Combine phi + disturbance (exp 15) — does phi help compensate for noise?
+- Test much larger disturbance scales to find where the standard CBF breaks down.

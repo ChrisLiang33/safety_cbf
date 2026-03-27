@@ -1,0 +1,85 @@
+TLDR: Without noise, phi is useless — agent learns to minimize it. Performance
+identical to exp 9. The ISSf-CBF robustness term adds overhead with no benefit in
+deterministic dynamics. 4D action space doesn't hurt training though.
+
+Experiment 14: Phi-CBF / ISSf-CBF (Learnable Robustness Margin)
+===============================================================
+
+Question:
+Can the RL agent learn to use the ISSf-CBF robustness parameter phi in addition to
+alpha and steering? The standard CBF constraint is Lgh @ u >= -alpha * h(x). The
+ISSf-CBF adds a robustness term: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x).
+The 1/h(x) denominator makes the constraint aggressively tighter near obstacles
+(where h is small), providing a built-in safety margin. phi = 1/epsilon > 0 controls
+how much extra margin is added. Can the agent learn when to raise phi (more margin)
+vs keep it low (less conservative)?
+
+Setup:
+- Dynamic agent: [kx, ky, alpha, phi] action space
+  - kx/ky in [-3, 3], alpha in [0.1, 5.0], phi in [0.01, 10.0]
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with proportional go-to-goal steering
+  - NOTE: baselines use standard CBF (no phi), fixed k_nom = 3.0 * dir_to_target
+- ISSf-CBF RHS: -alpha * h(x) + (||Lgh||^2 * phi) / max(h(x), 1e-4)
+- 3 obstacles (radius=5.0), same slalom layout as exp 9
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+- NO disturbance — clean dynamics to isolate phi's effect
+
+Observations:
+- Combined Scenarios (8 hand-picked):
+  - Dynamic agent with phi successfully weaves through all 8 scenarios.
+  - Trajectories (col 1) show smooth weaving paths similar to exp 9.
+  - Robot speed (col 2) shows three characteristic dips at each obstacle.
+  - Alpha adaptation (col 3) shows the familiar three-spike pattern — alpha rises
+    near each obstacle and drops in open space. Behavior is very similar to exp 9.
+  - Phi adaptation (col 6, rightmost): phi stays relatively low and flat across
+    most of the course. The agent learned to keep phi near its lower bound (~0.01-1.0)
+    in most scenarios. There is no strong per-obstacle phi modulation.
+  - Alpha-distance correlation (col 5) shows the usual inverse relationship.
+
+- Phi Behavior Analysis:
+  - The agent essentially learned that phi is not very useful in the noise-free setting.
+    Since dynamics are deterministic, the standard CBF already provides sufficient
+    safety guarantees — the extra robustness margin from phi is unnecessary overhead.
+  - Keeping phi low minimizes the additional constraint tightening, which allows higher
+    speed near obstacles (since the (||Lgh||^2 * phi)/h(x) term can make the QP
+    infeasible or very restrictive when phi is large and h is small).
+  - The agent correctly identified that in a deterministic world, phi should be
+    minimized to avoid unnecessary conservatism.
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 ~21%, alpha=0.5/1.0/5.0 100%, Dynamic a+phi 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~3.5m, Dynamic ~1.88m (slightly larger than exp 9's
+    ~1.43m), alpha=5.0 ~0.56m. The phi term may be adding a small extra margin
+    even at low phi values.
+  - Path Efficiency: Dynamic ~0.98, near-optimal.
+  - Episode Length: Dynamic ~370 steps, similar to exp 9's ~369.
+  - Average Speed: Dynamic ~1.98 m/s, similar to exp 9.
+
+Conclusion:
+In a noise-free environment, the ISSf-CBF phi parameter provides minimal additional
+value over the standard CBF. The agent learned to essentially minimize phi, relying
+on alpha and steering for performance — the correct strategy when there's no
+disturbance to compensate for.
+
+Performance metrics are nearly identical to exp 9: same 100% success rate, same
+path efficiency, similar speed. The only notable difference is a slightly larger
+safety margin (1.88m vs 1.43m), which may be due to the residual effect of even
+small phi values adding constraint tightening near obstacles.
+
+The ISSf-CBF constraint formula (||Lgh||^2 * phi)/h(x) is designed for disturbance
+rejection — the 1/h(x) term creates an increasing safety buffer as the robot
+approaches obstacles. Without actual disturbance, this buffer is wasted margin.
+This motivates experiment 15, which adds noise to test whether the agent learns
+to raise phi to compensate.
+
+The fact that the 4D action space ([kx, ky, alpha, phi]) doesn't degrade performance
+compared to the 3D space ([kx, ky, alpha]) is encouraging — the extra degree of
+freedom didn't confuse the policy or cause training instability.
+
+Future Steps:
+- Add disturbance (exp 15) — does the agent learn to raise phi to compensate for
+  noise, validating the ISSf-CBF theory?
+- Test larger disturbance scales to see if phi becomes essential for safety.
+- Consider whether phi should be adapted based on estimated disturbance magnitude
+  rather than learned end-to-end.

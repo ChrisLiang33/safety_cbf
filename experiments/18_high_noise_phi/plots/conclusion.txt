@@ -1,0 +1,65 @@
+TLDR: [TO FILL after results]
+
+Experiment 18: High-Noise Phi-CBF (ISSf-CBF Stress Test)
+=========================================================
+
+Question:
+Does phi become essential under high disturbance? Experiments 14-15 showed phi stays
+low because noise was too small (scale 0.05) — the standard CBF handled it fine with
+0% collisions, making phi a "comfort margin" rather than a necessity. Here we crank
+noise to 5-6x higher levels to stress-test the ISSf-CBF framework.
+
+Hypothesis: at noise scale 0.3, the standard CBF (no phi) will start accumulating
+safety violations because the disturbance can push the robot through the CBF barrier
+between timesteps. The ISSf-CBF's phi term (||Lgh||^2 * phi / h(x)) should provide
+the formal robustness margin needed to prevent these violations. We expect to see:
+  1. Alpha-only agent (standard CBF): non-zero collision rate at high noise
+  2. Alpha+phi agent (ISSf-CBF): 0% or near-0% collisions
+  3. Phi visibly increases near obstacles — the agent learned phi is necessary
+  4. Alpha decreases near obstacles while phi increases — the expected trade-off
+
+Setup:
+- Dynamic alpha+phi agent: [kx, ky, alpha, phi] action space (ISSf-CBF)
+  - kx/ky in [-3, 3], alpha in [0.1, 5.0], phi in [0.01, 10.0]
+- Dynamic alpha-only agent: [kx, ky, alpha] action space (standard CBF)
+  - kx/ky in [-3, 3], alpha in [0.1, 5.0]
+  - Both agents trained fresh in this experiment with same noise
+- ISSf-CBF RHS: -alpha * h(x) + (||Lgh||^2 * phi) / max(h(x), 1e-4)
+- Standard CBF RHS: -alpha * h(x)
+- Training disturbance: uniform noise, scale domain-randomized [0.0, 0.5] per episode
+  (5x higher than exp 15's [0.0, 0.1])
+- Eval disturbance: noise scale = 0.3 (6x higher than exp 15's 0.05)
+- Dynamics: robot_pos += safe_u * dt + noise * dt
+- 3 obstacles (radius=5.0), same slalom layout as exps 9/13/14/15
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (8 hand-picked, noise=0.3):
+  [TO FILL after running experiment]
+
+- Alpha & Phi Adaptation:
+  [TO FILL — expecting visible phi spikes near obstacles, alpha-phi trade-off]
+
+- Aggregate Metrics (100 random scenarios, noise=0.3):
+  - Target Reached: [TO FILL]
+  - Safety Violations: [TO FILL — key metric: does alpha-only get collisions?]
+  - Safety Margin: [TO FILL — expect alpha+phi >> alpha-only]
+  - Path Efficiency: [TO FILL]
+  - Episode Length: [TO FILL]
+  - Average Speed: [TO FILL]
+
+Conclusion:
+[TO FILL after analyzing results]
+
+Comparison to Exp 15 (low noise):
+- Exp 15 noise: 0.05, Exp 18 noise: 0.3 (6x higher)
+- Exp 15 safety margin: dynamic 1.64m vs standard CBF ~0.93m (77% larger)
+- Exp 18 safety margin: [TO FILL — expect even larger gap]
+- Exp 15 collisions: 0% for all methods
+- Exp 18 collisions: [TO FILL — expect standard CBF to have non-zero collisions]
+
+Future Steps:
+- If phi proves essential at noise=0.3, test at noise=0.5+ to find the breaking point
+- Combine ISSf-CBF with unicycle dynamics (hardest combination)
+- Test whether a fixed phi baseline (e.g., phi=0.5) achieves the same benefit as
+  learned phi, or whether adaptation is crucial

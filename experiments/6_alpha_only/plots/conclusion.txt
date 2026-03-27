@@ -1,0 +1,66 @@
+TLDR: this was trying to address does alpha raises its self back up?
+
+Experiment 6: Alpha Only (Single Obstacle)
+==========================================
+
+Question:
+Can RL learn a useful dynamic alpha policy when the agent has NO steering control?
+The agent only outputs [alpha], while a fixed proportional controller (k_nom = 2.0 *
+direction_to_target) handles steering. This isolates the question: is adaptive alpha
+alone — controlling how aggressively the CBF intervenes — enough to improve
+performance over any fixed alpha?
+
+Setup:
+- Dynamic agent: [alpha] action space only (alpha in [0.1, 5.0])
+- Steering: fixed proportional go-to-goal controller (k_nom = 2.0 * dir_to_target)
+- Baselines: fixed alpha = [0.1, 0.5, 1.0, 5.0] with same proportional steering
+- 1 obstacle (radius=1.0), x in [3,7], y in [-2,2]
+- Target at x=10, y in [-4,4], radius in [0.5,2.0]
+- Single-integrator dynamics, 900K PPO timesteps, 8 parallel envs
+
+Observations:
+- Combined Scenarios (9 hand-picked):
+  - Dynamic alpha successfully navigates all scenarios, threading between obstacle
+    and target with the fixed proportional controller.
+  - The robot speed (col 2) clearly shows speed dips near the obstacle and full
+    speed in open space — the CBF is throttling the proportional controller more
+    when alpha is low, less when alpha is high.
+  - Alpha adaptation (col 3) shows a clear spike near the obstacle in most scenarios,
+    with alpha rising sharply as the robot approaches (counterintuitive — higher alpha
+    means less CBF restriction, so the robot speeds up through the tight section).
+  - In "No Obstacle" scenario where obstacle is far from the path, alpha stays
+    relatively constant — the agent learned that no adaptation is needed.
+
+- Alpha Adaptation Details:
+  - The alpha-vs-distance relationship here is more nuanced than in exps 1-5.
+  - In some scenarios, alpha actually increases near the obstacle rather than
+    decreasing, because the proportional controller already steers away, and higher
+    alpha lets the robot maintain more speed through the CBF zone.
+  - The agent learned that with a fixed good controller, the CBF just needs to
+    get out of the way (high alpha) rather than aggressively intervene (low alpha).
+
+- Aggregate Metrics (100 random scenarios):
+  - Target Reached: alpha=0.1 91%, alpha=0.5/1.0/5.0 100%, Dynamic 100%.
+  - Safety Violations: 0% across all methods.
+  - Safety Margin: alpha=0.1 ~2.63m, alpha=0.5 ~1.17m, Dynamic ~0.52m,
+    alpha=5.0 ~0.49m. Dynamic is very close to the most aggressive baseline.
+  - Path Efficiency: all methods ~0.91-1.03. With fixed steering, path shape is
+    mostly determined by the proportional controller, so efficiency is similar.
+
+Conclusion:
+Even with no steering control, dynamic alpha learns a meaningful policy that achieves
+100% success rate (vs 91% for alpha=0.1). The agent essentially learned to keep
+alpha high (minimizing CBF intervention) since the proportional controller already
+steers a safe path. The safety margin is very tight (~0.52m) because the agent
+trusts the CBF and proportional controller combination and maximizes speed.
+
+The key insight: with a competent nominal controller, dynamic alpha's main job is to
+reduce unnecessary CBF throttling. The agent learned "get out of the way" rather than
+"intervene more carefully" — fundamentally different from the [kx, ky, alpha] agents
+in exps 1-5 where alpha was used to control the tradeoff.
+
+Future Steps:
+- Test with 2 obstacles in a squeeze gate (exp 7) — does alpha-only still work when
+  both CBF constraints are active and the proportional controller can't avoid both?
+- Scale to larger maps with bigger obstacles (exp 8).
+- Scale to 3-obstacle slalom (exp 10).
