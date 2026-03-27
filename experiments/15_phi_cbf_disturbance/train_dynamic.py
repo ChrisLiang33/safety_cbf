@@ -9,7 +9,7 @@ N_ENVS = 8
 
 if __name__ == "__main__":
     print("Training phi-CBF + disturbance model (kx, ky, alpha, phi)...")
-    print("  CBF: Lgh @ u >= -alpha * h(x) + phi * ||Lgh||^2")
+    print("  ISSf-CBF: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)")
     print("  Domain randomization: noise scale ~ U(0.0, 0.1) per episode")
 
     env_fns = [lambda: PhiCBFDisturbanceDynamicEnv(disturbance_range=(0.0, 0.1)) for _ in range(N_ENVS)]

@@ -1,15 +1,13 @@
 """
-3-obstacle weave with learnable phi in CBF constraint.
+3-obstacle weave with learnable phi (ISSf-CBF).
 Agent controls [kx, ky, alpha, phi].
 
-CBF constraint: Lgh @ u >= -alpha * h(x) + phi * ||Lgh||^2
+ISSf-CBF constraint: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
 
-phi acts as a robustness margin scaled by the Lie derivative magnitude:
-  - phi > 0: tighter constraint (raises the RHS, harder to satisfy → more conservative)
-  - phi < 0: relaxed constraint (lowers the RHS → less conservative)
-
-The agent should learn to increase phi near obstacles for extra safety margin
-and decrease phi in open space to maintain speed.
+phi = 1/epsilon is always positive (robustness margin).
+The 1/h(x) term aggressively tightens the constraint near the safety boundary.
+  - phi too large → QP infeasible (especially as h(x) → 0)
+  - phi too small → no robustness, recovers nominal CBF
 """
 import gymnasium as gym
 from gymnasium import spaces
@@ -25,8 +23,8 @@ class PhiCBFDynamicEnv(gym.Env):
 
         # ACTION: [kx, ky, alpha, phi]
         self.action_space = spaces.Box(
-            low=np.array([-3.0, -3.0, 0.1, -0.5], dtype=np.float32),
-            high=np.array([3.0, 3.0, 5.0, 2.0], dtype=np.float32),
+            low=np.array([-3.0, -3.0, 0.1, 0.01], dtype=np.float32),
+            high=np.array([3.0, 3.0, 5.0, 10.0], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -102,12 +100,13 @@ class PhiCBFDynamicEnv(gym.Env):
             h_vals.append(h)
             L_g_h_vals.append(L_g_h)
 
-        # Solve QP with modified CBF: Lgh @ u >= -alpha * h(x) + phi * ||Lgh||^2
+        # ISSf-CBF: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
         self._k_nom_param.value = k_nom
         for i in range(3):
             self._L_g_h[i].value = L_g_h_vals[i]
             Lgh_norm_sq = np.sum(L_g_h_vals[i]**2)
-            self._rhs[i].value = -alpha * h_vals[i] + phi * Lgh_norm_sq
+            h_safe = max(h_vals[i], 1e-4)  # clamp to avoid division by zero
+            self._rhs[i].value = -alpha * h_vals[i] + (Lgh_norm_sq * phi) / h_safe
 
         try:
             self._prob.solve(solver=cp.OSQP, verbose=False, warm_start=True)
