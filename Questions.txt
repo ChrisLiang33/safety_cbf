@@ -1,3 +1,4 @@
+regarding alpha values::::
 h = 50
 higher alpha means pretty much all speed is cool, lgh @ u >= -250, alpha=5
 lower alpha means smaller set of speed is allowed, lgh @ u >= -5, alpha=0.1
@@ -6,5 +7,16 @@ h = 5
 higher alpha means pretty much all speed is cool, lgh @ u >= -25, alpha=5
 lower alpha means smaller set of speed is allowed, lgh @ u >= -0.5, alpha=0.1
 
-
 is there a way to learn a optimal alpha so the CBF never has to step in? we can penalize the CBF intervention magnitude. 
+
+couple things to think about. 
+1. Sparse signal (temporal)
+The CBF constraint L_g_h @ u >= -alpha * h — alpha only matters when the robot is close to the obstacle AND approaching it. That's maybe 5-10 steps out of a 50-80 step episode (~10-15% of timesteps). The other 85-90% of timesteps, any alpha produces identical outcomes. PPO averages gradients over all timesteps, so the meaningful signal is drowned.
+
+2. Risk asymmetry
+When alpha does matter (near obstacle):
+
+High alpha → direct path → +small progress reward, but risk of collision (-100)
+Low alpha → CBF pushes wider → -small progress cost, but guaranteed safe
+The -100 collision penalty is catastrophic compared to the marginal progress benefit. PPO becomes risk-averse and favors low alpha.
+
