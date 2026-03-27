@@ -1,0 +1,70 @@
+TLDR: [TO FILL after results]
+
+Experiment 22: Constant Bias Disturbance (Sensor Bias Simulation)
+===================================================================
+
+Question:
+In exps 18-19, i.i.d. per-timestep noise averages out over hundreds of steps (CLT),
+so the CBF never faces a persistent directional force. Does a CONSTANT BIAS (sampled
+once per episode) finally stress-test the CBF enough to make phi essential?
+
+Motivation (accuracy vs precision analogy):
+- Previous experiments: noise ~ U[-s, s] each timestep = LOW PRECISION, HIGH ACCURACY
+  The robot wobbles but the mean displacement is ~0. Like bottom-left of a target diagram.
+- This experiment: constant bias per episode = HIGH PRECISION, LOW ACCURACY
+  The robot is pushed consistently in one direction. Like top-right of a target diagram.
+  This does NOT average out — it's a persistent systematic error (sensor bias).
+
+Hypothesis: with constant bias of magnitude 0.7:
+  1. The standard CBF (alpha-only) will accumulate safety violations because the
+     persistent drift systematically pushes the robot into obstacles
+  2. The ISSf-CBF's phi term will learn to create a robustness margin that accounts
+     for the persistent bias, preventing violations
+  3. Phi will show meaningful values (not flat near 0.01) because the constant bias
+     can't be ignored — it's always pushing in the same direction
+  4. The difference between alpha+phi and alpha-only should be dramatic
+
+Setup:
+- Dynamic alpha+phi agent: [kx, ky, alpha, phi] action space (ISSf-CBF)
+  - kx/ky in [-3, 3], alpha in [0.1, 5.0], phi in [0.01, 10.0]
+- Dynamic alpha-only agent: [kx, ky, alpha] action space (standard CBF)
+  - kx/ky in [-3, 3], alpha in [0.1, 5.0]
+  - Both agents trained fresh in this experiment with same noise model
+- Noise model: CONSTANT BIAS per episode
+  - In reset(): sample random angle, compute bias = magnitude * [cos(angle), sin(angle)]
+  - In step(): robot_pos += safe_u * dt + bias * dt (same bias every step!)
+  - Training: bias magnitude domain-randomized ~ U(0.0, 1.0) per episode
+  - Eval: bias magnitude = 0.7, hand-picked scenarios use upward bias (+y)
+  - Random scenarios: random bias direction per scenario
+- ISSf-CBF RHS: -alpha * h(x) + (||Lgh||^2 * phi) / max(h(x), 1e-4)
+- Standard CBF RHS: -alpha * h(x)
+- 3 obstacles (radius=5.0), same slalom layout as exps 9/13/14/15/18/19
+- 100m map, single-integrator dynamics, 2M PPO timesteps, 8 parallel envs
+
+Key difference from exp 19:
+- Exp 19: noise ~ U[-0.7, 0.7] EVERY TIMESTEP (i.i.d.) → averages out
+- Exp 22: bias sampled ONCE, magnitude 0.7, applied EVERY TIMESTEP → cumulative drift
+- Over 300 steps: exp 19 net drift ~ 0, exp 22 net drift = 0.7 * 0.1 * 300 = 21m!
+
+Observations:
+- Combined Scenarios (8 hand-picked, constant bias magnitude=0.7, direction=up):
+  [TO FILL after running experiment]
+
+- Alpha & Phi Adaptation:
+  [TO FILL — expecting phi to finally show meaningful values]
+
+- Aggregate Metrics (100 random scenarios, bias magnitude=0.7, random directions):
+  - Target Reached: [TO FILL]
+  - Safety Violations: [TO FILL — KEY METRIC: expect alpha-only to fail]
+  - Safety Margin: [TO FILL]
+  - Path Efficiency: [TO FILL]
+  - Episode Length: [TO FILL]
+  - Average Speed: [TO FILL]
+
+Conclusion:
+[TO FILL after analyzing results]
+
+Comparison to Exp 19 (i.i.d. noise=0.7):
+- Exp 19: i.i.d. noise, Exp 22: constant bias (same magnitude)
+- Exp 19: net drift ~ 0 (CLT), Exp 22: net drift = 21m over episode!
+- Exp 19: [TO FILL], Exp 22: [TO FILL]
