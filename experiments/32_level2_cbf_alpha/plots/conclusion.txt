@@ -1,0 +1,25 @@
+TLDR: [TO FILL after results]
+
+Experiment 32: Level 2 — CBF with Learnable Alpha (No Disturbance)
+====================================================================
+
+Question:
+With a standard CBF and learnable alpha, does the QP guarantee 0% collisions?
+How does alpha adapt near obstacles?
+
+Setup:
+- Action: [kx, ky, alpha] — standard CBF with QP safety filter
+- CBF: Lgh @ u >= -alpha * h(x)
+- No disturbance, no radius noise — clean conditions
+- Gentler x-band randomization, 5M timesteps, 16 envs
+
+Expected:
+- 0% collisions (CBF theoretically guarantees h(x) >= 0)
+- High target success rate
+- Alpha should decrease near obstacles (more conservative)
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]

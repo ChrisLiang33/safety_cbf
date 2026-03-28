@@ -1,0 +1,29 @@
+TLDR: [TO FILL after results]
+
+Experiment 34: Level 4 — ISSf-CBF with Alpha + Phi + Disturbance + Radius Noise
+==================================================================================
+
+Question:
+With BOTH dynamics disturbance (constant bias) AND perception error (radius noise),
+does the ISSf-CBF's phi term show adaptive behavior near obstacles?
+This is the full uncertainty model — phi should finally be essential.
+
+Setup:
+- Action: [kx, ky, alpha, phi] — ISSf-CBF with QP safety filter
+- ISSf-CBF: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
+- Constant bias: magnitude ~ U(0.0, 1.0), random direction, per episode
+- Radius noise: error ~ U(-1.0, +1.0) per obstacle per episode
+- TRUE radius = 5.0 (collision), ESTIMATED radius = true + error (CBF + obs)
+- Eval: bias=0.7 upward, radius error=-1.0
+- Gentler x-band randomization, 5M timesteps, 16 envs
+
+Expected:
+- Phi increases near obstacles (compensates for radius underestimate + bias)
+- Alpha decreases near obstacles (more conservative approach)
+- Better safety than Level 3 (alpha-only under disturbance)
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]

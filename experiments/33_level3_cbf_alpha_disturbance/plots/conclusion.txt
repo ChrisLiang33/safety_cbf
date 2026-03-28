@@ -1,0 +1,28 @@
+TLDR: [TO FILL after results]
+
+Experiment 33: Level 3 — CBF with Alpha + Constant Bias Disturbance
+=====================================================================
+
+Question:
+The standard CBF assumes x_dot = u, but reality is x_dot = u + bias.
+Does this model mismatch cause the CBF to fail (collisions)?
+This establishes the NEED for phi (Level 4).
+
+Setup:
+- Action: [kx, ky, alpha] — standard CBF with QP safety filter
+- CBF: Lgh @ u >= -alpha * h(x)
+- Constant bias: magnitude ~ U(0.0, 1.0), random direction, per episode
+- Eval: bias magnitude = 0.7, upward direction for hand-picked
+- No radius noise
+- Gentler x-band randomization, 5M timesteps, 16 envs
+
+Expected:
+- Some collisions under strong bias (CBF can't account for unmodeled force)
+- Alpha may increase near obstacles to compensate, but has limits
+- Performance degradation compared to Level 2
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]
