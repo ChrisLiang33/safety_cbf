@@ -1,0 +1,28 @@
+TLDR: [TO FILL after results]
+
+Experiment 31: Navigation Baseline (kx, ky only, NO CBF)
+==========================================================
+
+Question:
+Can the policy learn basic obstacle navigation with just [kx, ky] before we
+add any CBF/alpha/phi? If kx/ky can't navigate, nothing else matters.
+
+Setup:
+- Action: [kx, ky] — direct velocity control, no CBF, no QP
+- robot_pos += [kx, ky] * dt (no safety filter)
+- Collisions penalized by reward only (-100)
+- 3 obstacles, radius=5.0
+- Gentler randomization: obstacles in x-bands [15-35, 40-60, 65-85], y in [-8, 8]
+- 5M timesteps (2.5x more than previous experiments)
+- No disturbance, no radius noise — clean navigation task
+
+Expected:
+- High target success rate (>90%) if navigation is learnable
+- Some collisions (no CBF protection)
+- This establishes the baseline for what kx/ky can do alone
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]
