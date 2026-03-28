@@ -1,0 +1,25 @@
+TLDR: [TO FILL after results]
+
+Experiment 35: ISSf-CBF with ONLY Constant Bias (No Radius Noise)
+===================================================================
+
+Question:
+With ONLY dynamics disturbance (constant bias), does phi learn to add margin
+that alpha alone couldn't provide (exp 33 failed 3/8)?
+
+Compare to:
+- Exp 33 (Level 3): alpha-only + bias → 3/8 failed
+- Exp 35 (this): alpha+phi + bias → does phi reduce failures?
+
+Setup:
+- Action: [kx, ky, alpha, phi]
+- ISSf-CBF: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
+- Constant bias ~ U(0.0, 1.0) per episode, eval at 0.7 upward
+- No radius noise — CBF uses correct obstacle radius
+- X-band obstacle placement, 5M timesteps, 16 envs
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]

@@ -1,0 +1,27 @@
+TLDR: [TO FILL after results]
+
+Experiment 36: ISSf-CBF with ONLY Radius Estimation Noise (No Bias)
+=====================================================================
+
+Question:
+With ONLY perception uncertainty (radius noise), does phi learn to add margin
+to compensate for the gap between estimated and true obstacle radius?
+
+Compare to:
+- Exp 32 (Level 2): alpha-only, no noise → all 8 reached
+- Exp 36 (this): alpha+phi + radius noise → does phi handle perception error?
+
+Setup:
+- Action: [kx, ky, alpha, phi]
+- ISSf-CBF: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
+- Radius error ~ U(-1.0, +1.0) per obstacle per episode
+- TRUE radius = 5.0 (collision), ESTIMATED radius = true + error (CBF + obs)
+- Eval: error = -1.0 (worst case: thinks 4.0, true is 5.0)
+- No dynamics disturbance
+- X-band obstacle placement, 5M timesteps, 16 envs
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]

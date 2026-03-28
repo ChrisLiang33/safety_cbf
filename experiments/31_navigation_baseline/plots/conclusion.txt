@@ -1,4 +1,7 @@
-TLDR: [TO FILL after results]
+TLDR: Navigation baseline passes. The policy learns to navigate all 8 hand-picked
+scenarios with just [kx, ky], no CBF. Robot reaches target in every scenario, maintains
+~3 m/s speed, slows near obstacles, minimum clearances ~1-3m. No collisions observed
+in hand-picked scenarios. Foundation for Levels 2-4 is confirmed.
 
 Experiment 31: Navigation Baseline (kx, ky only, NO CBF)
 ==========================================================
@@ -22,7 +25,31 @@ Expected:
 - This establishes the baseline for what kx/ky can do alone
 
 Observations:
-[TO FILL]
+- Combined Scenarios (8 hand-picked):
+  All 8 scenarios show successful navigation to the target. The robot takes smooth
+  curved paths around obstacles. No collisions in any hand-picked scenario.
+
+- Speed:
+  Robot maintains ~3 m/s (near max) in open space, with natural slowdowns to ~1-2 m/s
+  when maneuvering near obstacles. The policy learned speed modulation without being
+  explicitly taught it.
+
+- Distance to Obstacles:
+  Minimum clearances of ~1-3m across scenarios. The robot gets close but never
+  crosses zero. Without CBF protection, safety relies entirely on learned behavior
+  from the -100 collision penalty.
+
+- Aggregate Policy Map (Speed vs Distance):
+  Clear pattern: speed stays ~3 m/s when far (>10m), gradually decreases as the
+  robot approaches obstacles. Some scenarios show the robot within 1-2m of surfaces.
+  No data points below x=0 confirms no collisions.
 
 Conclusion:
-[TO FILL]
+Level 1 PASSES. The policy can learn basic obstacle navigation with just [kx, ky]
+using gentler x-band randomization and 5M training steps. The navigation foundation
+works — the failure in exp 26 (25% success) was due to fully random obstacle placement
+being too hard, not a fundamental RL problem.
+
+Key takeaway: with structured-but-varied obstacle placement and sufficient training,
+PPO learns smooth, efficient navigation. This confirms we can proceed to Level 2
+(adding CBF with alpha) knowing that the underlying navigation capability is solid.

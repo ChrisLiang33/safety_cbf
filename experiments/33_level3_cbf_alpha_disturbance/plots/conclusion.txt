@@ -1,4 +1,8 @@
-TLDR: [TO FILL after results]
+TLDR: Standard CBF with alpha fails under constant bias disturbance. 3 out of 8
+hand-picked scenarios fail (Straight Path, Obstacles on Path, Spread). The CBF
+constraint has no term to account for the unmodeled bias force — alpha controls
+reactivity to current state but cannot compensate for persistent external disturbance.
+This establishes the need for the ISSf-CBF phi term (Level 4).
 
 Experiment 33: Level 3 — CBF with Alpha + Constant Bias Disturbance
 =====================================================================
@@ -22,7 +26,39 @@ Expected:
 - Performance degradation compared to Level 2
 
 Observations:
-[TO FILL]
+- Hand-picked scenarios (bias=0.7, direction=upward):
+  1. Straight Path — FAILED
+  2. Obstacles on Path — FAILED
+  3. All Upper — REACHED
+  4. All Lower — REACHED
+  5. Narrow Gap — REACHED
+  6. Clustered — REACHED
+  7. Spread — FAILED
+  8. Off-Center Target — REACHED
+  3/8 scenarios fail. Failures occur when obstacles are in the robot's path AND
+  the upward bias pushes toward them.
+
+- Alpha adaptation (col 2):
+  Alpha still shows some reactivity to obstacles but the pattern is noisier than
+  Level 2. The bias disrupts the policy's ability to cleanly adapt alpha.
+
+- Aggregate policy map (alpha vs distance):
+  Correlation is weaker and messier than Level 2. Alpha range compressed (~0.2-1.75
+  vs 0.1-2.1 in Level 2). Some scenarios show erratic alpha at large distances.
+  The clean "high alpha far, low alpha near" pattern from Level 2 is degraded.
+
+- Comparison to Level 2:
+  Level 2: all 8 scenarios reached, clean alpha-distance correlation
+  Level 3: 3/8 fail, noisy alpha adaptation under bias
 
 Conclusion:
-[TO FILL]
+The standard CBF constraint (Lgh @ u >= -alpha * h(x)) assumes x_dot = u, but
+reality is x_dot = u + bias. Alpha controls how aggressively the CBF reacts to
+the current state, but it has NO term to account for the persistent unmodeled force.
+No matter how the policy tunes alpha, the constraint is fundamentally missing the
+bias — it cannot formally guarantee safety under disturbance.
+
+This directly motivates the ISSf-CBF (Level 4), which adds the phi term:
+  Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
+The phi/h(x) term grows near obstacles, creating extra margin to absorb the
+effect of the disturbance that alpha alone cannot handle.
