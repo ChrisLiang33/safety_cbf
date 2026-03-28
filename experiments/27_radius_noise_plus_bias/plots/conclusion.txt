@@ -1,0 +1,41 @@
+TLDR: [TO FILL after results]
+
+Experiment 27: Radius Noise + Constant Bias + Randomized Obstacles (ISSf-CBF only)
+====================================================================================
+
+Question:
+With BOTH perception uncertainty (radius error) AND dynamics uncertainty (constant bias),
+does the ISSf-CBF show stronger phi adaptation? This is the most realistic scenario —
+the robot has wrong obstacle size estimates AND gets pushed by persistent external forces.
+
+Key changes from exp 26:
+  - Added constant bias disturbance: robot_pos += safe_u * dt + bias * dt
+  - Bias sampled ONCE per episode (magnitude ~ U(0.0, 1.0), random direction)
+  - This avoids CLT averaging — bias is persistent throughout the episode
+
+Setup:
+- ISSf-CBF agent: [kx, ky, alpha, phi] action space
+- Radius noise: error ~ U(-1.0, +1.0) per obstacle per episode
+- Constant bias: magnitude ~ U(0.0, 1.0), random direction, per episode
+- TRUE radius = 5.0 (collision), ESTIMATED radius = true + error (CBF + observation)
+- Fully randomized obstacle placement with min_spacing=12m
+- Eval: worst-case error = -1.0, bias magnitude = 0.7, direction = upward
+- 2M PPO timesteps, 8 parallel envs
+
+Combined uncertainty budget:
+  - Perception: CBF sees 4.0 radius, true is 5.0 → 1.0m danger zone
+  - Dynamics: 0.7 * 0.1 * 300 = 21m cumulative drift over episode
+  - Together: robot has wrong model AND gets pushed into obstacles
+
+Observations:
+- Hand-picked scenarios (8 diverse layouts, error=-1.0, bias=0.7 up):
+  [TO FILL]
+
+- Alpha & Phi behavior near obstacles:
+  [TO FILL — strongest test for phi adaptation]
+
+- Aggregate Metrics (100 random scenarios):
+  [TO FILL]
+
+Conclusion:
+[TO FILL]

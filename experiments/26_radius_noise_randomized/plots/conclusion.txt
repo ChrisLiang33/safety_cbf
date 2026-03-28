@@ -1,0 +1,36 @@
+TLDR: [TO FILL after results]
+
+Experiment 26: Radius Estimation Noise + Randomized Obstacles (ISSf-CBF only)
+==============================================================================
+
+Question:
+With fully randomized obstacle placement (not forced slalom) and radius estimation
+noise, does the ISSf-CBF's phi term show clear correlation with obstacle proximity?
+Does removing the slalom bias lead to better generalization?
+
+Key changes from exp 25:
+  - No alpha-only baseline (focus purely on alpha/phi behavior analysis)
+  - Obstacles placed anywhere in corridor with min spacing (not alternating up/down)
+  - Same radius estimation noise model
+
+Setup:
+- ISSf-CBF agent: [kx, ky, alpha, phi] action space
+- Radius noise: error ~ U(-1.0, +1.0) per obstacle per episode
+- TRUE radius = 5.0 (collision), ESTIMATED radius = true + error (CBF + observation)
+- No dynamics disturbance
+- Fully randomized obstacle placement with min_spacing=12m
+- Eval: worst-case error = -1.0 (est=4.0, true=5.0)
+- 2M PPO timesteps, 8 parallel envs
+
+Observations:
+- Hand-picked scenarios (8 diverse layouts, radius error=-1.0):
+  [TO FILL]
+
+- Alpha & Phi behavior near obstacles:
+  [TO FILL — key question: does phi increase near obstacles?]
+
+- Aggregate Metrics (100 random scenarios):
+  [TO FILL]
+
+Conclusion:
+[TO FILL]

@@ -1,20 +1,14 @@
 """
-3-obstacle weave with learnable phi (ISSf-CBF) + OBSTACLE RADIUS ESTIMATION NOISE.
+3-obstacle navigation with learnable phi (ISSf-CBF) + RADIUS ESTIMATION NOISE + CONSTANT BIAS.
 Agent controls [kx, ky, alpha, phi].
 
 ISSf-CBF constraint: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
 
-Key idea: In the real world, the robot doesn't know the true obstacle size — it
-estimates it from sensors (LiDAR, camera). This estimate has error.
-  - TRUE radius: used for collision detection (ground truth)
-  - ESTIMATED radius: used in CBF h(x) computation and observation (what robot believes)
-
-If the robot UNDERESTIMATES the radius, the CBF thinks it's safer than it really is.
-The phi term should learn to add margin to compensate for this perception error.
-
-Training: radius error per obstacle ~ U(-max_error, +max_error) sampled ONCE per episode.
-  - Negative error = underestimate (dangerous: CBF thinks obstacle is smaller)
-  - Positive error = overestimate (conservative: CBF thinks obstacle is bigger)
+Combined uncertainty model:
+  1. PERCEPTION: obstacle radius estimation error (sampled once per episode)
+  2. DYNAMICS: constant bias disturbance (sampled once per episode)
+Both sampled once to avoid averaging out via CLT.
+Fully randomized obstacle placement (no forced slalom).
 """
 import gymnasium as gym
 from gymnasium import spaces
@@ -22,14 +16,16 @@ import numpy as np
 import cvxpy as cp
 
 
-class PhiCBFRadiusNoiseEnv(gym.Env):
-    def __init__(self, radius_error_range=(-1.0, 1.0)):
+class PhiCBFRadiusNoisePlusBiasEnv(gym.Env):
+    def __init__(self, radius_error_range=(-1.0, 1.0), bias_magnitude_range=(0.0, 1.0)):
         super().__init__()
         self.dt = 0.1
-        # self.k_nom_speed = 3.0
+        self.k_nom_speed = 3.0
         self.radius_error_range = radius_error_range
-        self.true_radius = [5.0, 5.0, 5.0]       # ground truth for collision
-        self.estimated_radius = [5.0, 5.0, 5.0]   # what the CBF uses
+        self.bias_magnitude_range = bias_magnitude_range
+        self.true_radius = [5.0, 5.0, 5.0]
+        self.estimated_radius = [5.0, 5.0, 5.0]
+        self.bias = np.zeros(2)
 
         # ACTION: [kx, ky, alpha, phi]
         self.action_space = spaces.Box(
@@ -38,10 +34,12 @@ class PhiCBFRadiusNoiseEnv(gym.Env):
             dtype=np.float32,
         )
 
-        # OBS: same 14 dims (uses estimated radius in observation)
+        # OBS: 14 dims (uses estimated radius in observation)
         self.observation_space = spaces.Box(
-            low=np.array([-120, -25, 0, -120, -25, 0, -120, -25, 0, -120, -25, 0.1, -4, -4], dtype=np.float32),
-            high=np.array([120, 25, 10, 120, 25, 10, 120, 25, 10, 120, 25, 5.0, 4, 4], dtype=np.float32),
+            low=np.array([-120, -25, 0, -120, -25, 0, -120, -25, 0,
+                          -120, -25, 0.1, -4, -4], dtype=np.float32),
+            high=np.array([120, 25, 10, 120, 25, 10, 120, 25, 10,
+                           120, 25, 5.0, 4, 4], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -61,38 +59,62 @@ class PhiCBFRadiusNoiseEnv(gym.Env):
         constraints = [self._L_g_h[i] @ self._u >= self._rhs[i] for i in range(3)]
         self._prob = cp.Problem(cost, constraints)
 
+    def _place_obstacles(self):
+        """Place 3 obstacles randomly in the corridor with minimum spacing."""
+        min_spacing = 12.0
+        placed = []
+        for _ in range(3):
+            for _attempt in range(100):
+                x = self.np_random.uniform(15.0, 85.0)
+                y = self.np_random.uniform(-10.0, 10.0)
+                candidate = np.array([x, y])
+                too_close = False
+                for p in placed:
+                    if np.linalg.norm(candidate - p) < min_spacing:
+                        too_close = True
+                        break
+                if x < 10.0 or x > 90.0:
+                    too_close = True
+                if not too_close:
+                    placed.append(candidate)
+                    break
+            else:
+                x = self.np_random.uniform(15.0, 85.0)
+                y = self.np_random.uniform(-10.0, 10.0)
+                placed.append(np.array([x, y]))
+        return placed
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        self.robot_pos = np.zeros(2)
+        self.robot_pos = np.array([0.0, 0.0])
         self.velocity = np.zeros(2)
 
         target_y = self.np_random.uniform(-3.0, 3.0)
         self.target_pos = np.array([100.0, target_y])
         self.target_radius = self.np_random.uniform(1.5, 3.0)
 
-        x1 = self.np_random.uniform(20.0, 35.0)
-        y1 = self.np_random.uniform(5.0, 8.0)
-        self.obs_pos[0] = np.array([x1, y1])
+        # Fully randomized obstacle placement
+        placed = self._place_obstacles()
+        for i in range(3):
+            self.obs_pos[i] = placed[i]
 
-        x2 = self.np_random.uniform(45.0, 60.0)
-        y2 = self.np_random.uniform(-8.0, -5.0)
-        self.obs_pos[1] = np.array([x2, y2])
-
-        x3 = self.np_random.uniform(65.0, 80.0)
-        y3 = self.np_random.uniform(5.0, 8.0)
-        self.obs_pos[2] = np.array([x3, y3])
-
-        # TRUE radius is always 5.0 (for collision detection)
+        # TRUE radius is always 5.0
         self.true_radius = [5.0, 5.0, 5.0]
 
-        # ESTIMATED radius = true + error (sampled ONCE per episode per obstacle)
-        # This is what the CBF "sees" and what goes into the observation
+        # ESTIMATED radius = true + error (sampled ONCE per episode)
         for i in range(3):
             error = self.np_random.uniform(
                 self.radius_error_range[0], self.radius_error_range[1]
             )
-            self.estimated_radius[i] = max(self.true_radius[i] + error, 1.0)  # floor at 1.0
+            self.estimated_radius[i] = max(self.true_radius[i] + error, 1.0)
+
+        # CONSTANT BIAS: sample direction and magnitude ONCE per episode
+        bias_magnitude = self.np_random.uniform(
+            self.bias_magnitude_range[0], self.bias_magnitude_range[1]
+        )
+        angle = self.np_random.uniform(0, 2 * np.pi)
+        self.bias = bias_magnitude * np.array([np.cos(angle), np.sin(angle)])
 
         self.prev_dist2target = np.linalg.norm(self.robot_pos - self.target_pos)
         return self._get_obs(), {}
@@ -104,12 +126,12 @@ class PhiCBFRadiusNoiseEnv(gym.Env):
         phi = float(action[3])
         k_nom = np.array([kx, ky])
 
-        # CBF uses ESTIMATED radius (what the robot believes)
+        # CBF uses ESTIMATED radius
         h_vals = []
         L_g_h_vals = []
         for i in range(3):
             x_diff = self.robot_pos - self.obs_pos[i]
-            h = np.sum(x_diff**2) - self.estimated_radius[i]**2  # estimated!
+            h = np.sum(x_diff**2) - self.estimated_radius[i]**2
             L_g_h = 2 * x_diff
             h_vals.append(h)
             L_g_h_vals.append(L_g_h)
@@ -132,11 +154,11 @@ class PhiCBFRadiusNoiseEnv(gym.Env):
 
         safe_u = np.clip(safe_u, -3.0, 3.0)
 
-        # No dynamics disturbance — uncertainty is purely in perception
-        self.robot_pos += safe_u * self.dt
+        # Dynamics with CONSTANT BIAS disturbance
+        self.robot_pos += safe_u * self.dt + self.bias * self.dt
         self.velocity = safe_u.copy()
 
-        # Collision detection uses TRUE radius (ground truth)
+        # Collision detection uses TRUE radius
         dist2obs_true = []
         for i in range(3):
             dist2obs_true.append(
@@ -144,7 +166,6 @@ class PhiCBFRadiusNoiseEnv(gym.Env):
             )
         min_obs_dist_true = min(dist2obs_true)
 
-        # Also compute estimated distances (what robot believes)
         dist2obs_est = []
         for i in range(3):
             dist2obs_est.append(
@@ -156,7 +177,6 @@ class PhiCBFRadiusNoiseEnv(gym.Env):
         terminated = False
         reward = 0.0
 
-        # Collision based on TRUE radius
         if min_obs_dist_true < 0:
             reward = -100.0
             terminated = True
@@ -183,13 +203,13 @@ class PhiCBFRadiusNoiseEnv(gym.Env):
             "true_radius": list(self.true_radius),
             "estimated_radius": list(self.estimated_radius),
             "radius_errors": [self.estimated_radius[i] - self.true_radius[i] for i in range(3)],
+            "bias": self.bias.copy(),
         }
 
     def _get_obs(self):
         parts = []
         for i in range(3):
             rel = self.obs_pos[i] - self.robot_pos
-            # Observation uses ESTIMATED radius (what the robot "sees")
             parts.extend([rel[0], rel[1], self.estimated_radius[i]])
         rel_t = self.target_pos - self.robot_pos
         parts.extend([rel_t[0], rel_t[1], self.target_radius])
