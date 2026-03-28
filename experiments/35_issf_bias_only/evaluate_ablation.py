@@ -285,6 +285,140 @@ if __name__ == "__main__":
     print("Saved: plots/combined_scenarios.png")
 
     # =====================================================================
+    # PER-SCENARIO INDIVIDUAL PLOTS
+    # =====================================================================
+    scenario_dir = os.path.join(save_dir, "scenarios")
+    os.makedirs(scenario_dir, exist_ok=True)
+
+    for i, data in enumerate(all_scenarios):
+        scen, r = data["scen"], data["result"]
+        name = scen["name"].replace(" ", "_")
+
+        fig_s, axs_s = plt.subplots(1, 6, figsize=(42, 7),
+                                     gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
+
+        # --- Column 1: Trajectory with alpha colormap + bias arrow ---
+        ax = axs_s[0]
+        for j in range(3):
+            ax.add_patch(plt.Circle(scen["obs"][j], OBS_RADIUS,
+                                    color="red", alpha=0.2, linestyle="-"))
+        ax.add_patch(plt.Circle(scen["target_pos"], scen["target_radius"],
+                                color="green", alpha=0.3))
+
+        if len(r["traj_x"]) > 1 and len(r["alphas"]) > 0:
+            points = np.array([r["traj_x"][:-1], r["traj_y"][:-1]]).T.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
+            alpha_vals = np.array(r["alphas"][:len(segments)])
+            lc = LineCollection(segments, cmap="coolwarm", linewidth=2.5, zorder=5)
+            lc.set_array(alpha_vals)
+            lc.set_clim(0.1, 5.0)
+            ax.add_collection(lc)
+            cbar = plt.colorbar(lc, ax=ax, shrink=0.6, pad=0.02)
+            cbar.set_label("alpha", fontsize=10)
+
+        # Bias arrow annotation
+        ax.annotate("", xy=(5, 12), xytext=(5, 8),
+                     arrowprops=dict(arrowstyle="->", color="purple", lw=2.5))
+        ax.text(5, 13, f"bias={EVAL_BIAS_MAGNITUDE:.1f}", fontsize=10,
+                color="purple", ha="center", fontweight="bold")
+
+        for t in range(0, len(r["traj_x"]) - 1, TIME_MARKER_INTERVAL):
+            ax.plot(r["traj_x"][t], r["traj_y"][t], marker='s', color='black',
+                    markersize=5, zorder=6)
+            ax.text(r["traj_x"][t], r["traj_y"][t] + 0.8, f"t={t}", fontsize=9,
+                    color='black', ha='center', zorder=7)
+
+        status = ("REACHED" if r["reached_target"] else "FAIL") + \
+                 (" COLLISION" if r["collided"] else "")
+        ax.set_title(f"{scen['name']} -- {status}", fontsize=14)
+        ax.set_xlabel("x (m)", fontsize=12)
+        ax.set_ylabel("y (m)", fontsize=12)
+        ax.set_xlim(-5, 110)
+        ax.set_ylim(-16, 16)
+        ax.set_aspect("equal", adjustable="box")
+        ax.grid(True, alpha=0.3)
+
+        metrics_text = (f"Steps: {r['steps']}  Reward: {r['total_reward']:.0f}  "
+                        f"MinClearance: {r['min_clearance']:.2f}m  Efficiency: {r['path_efficiency']:.2f}")
+        ax.text(0.02, -0.10, metrics_text, transform=ax.transAxes, fontsize=9,
+                fontfamily='monospace',
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='lightyellow', alpha=0.9))
+
+        # --- Column 2: Alpha + Phi over time + obstacle zone shading ---
+        ax = axs_s[1]
+        ax.plot(r["alphas"], color="blue", linewidth=1.5, label="alpha")
+        ax2 = ax.twinx()
+        ax2.plot(r["phis"], color="red", linewidth=1.5, label="phi", alpha=0.7)
+        ax2.set_ylabel("Phi", color="red", fontsize=11)
+        ax2.tick_params(axis='y', labelcolor='red')
+        for oi in range(3):
+            close_mask = np.array(r["per_obs_dists"][oi]) < 5.0
+            for start_idx in range(len(close_mask)):
+                if close_mask[start_idx]:
+                    ax.axvspan(start_idx, start_idx + 1, color=OBS_COLORS[oi],
+                               alpha=0.1)
+        ax.set_title(f"{scen['name']} -- Alpha+Phi + Obs Zone", fontsize=14)
+        ax.set_xlabel("Time Step", fontsize=12)
+        ax.set_ylabel("Alpha", color="blue", fontsize=11)
+        ax.tick_params(axis='y', labelcolor='blue')
+        ax.set_ylim(0, 5.5)
+        ax.grid(True, alpha=0.3)
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=10)
+
+        # --- Column 3: Speed ---
+        ax = axs_s[2]
+        ax.plot(r["speeds"], color="black", linewidth=2)
+        ax.axhline(3.0, color="gray", linewidth=0.8, linestyle=":", alpha=0.4, label="Max")
+        ax.set_title(f"{scen['name']} -- Speed", fontsize=14)
+        ax.set_xlabel("Time Step", fontsize=12)
+        ax.set_ylabel("Speed (m/s)", fontsize=12)
+        ax.set_ylim(-0.1, 4.5)
+        ax.grid(True, alpha=0.3)
+
+        # --- Column 4: Alpha vs Obstacle Distance ---
+        ax = axs_s[3]
+        min_dists_at_step = [min(r["per_obs_dists"][oi][t] for oi in range(3))
+                             for t in range(len(r["alphas"]))]
+        ax.scatter(min_dists_at_step, r["alphas"], c=range(len(r["alphas"])),
+                   cmap="viridis", s=10, alpha=0.6)
+        ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
+        ax.set_title(f"{scen['name']} -- Alpha vs Obs Dist", fontsize=14)
+        ax.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=12)
+        ax.set_ylabel("Alpha", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right", fontsize=10)
+
+        # --- Column 5: Phi vs Obstacle Distance ---
+        ax = axs_s[4]
+        ax.scatter(min_dists_at_step, r["phis"], c=range(len(r["phis"])),
+                   cmap="magma", s=10, alpha=0.6)
+        ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
+        ax.set_title(f"{scen['name']} -- Phi vs Obs Dist", fontsize=14)
+        ax.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=12)
+        ax.set_ylabel("Phi", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right", fontsize=10)
+
+        # --- Column 6: Policy Map (alpha+phi scatter) ---
+        ax = axs_s[5]
+        sc = ax.scatter(r["alphas"], r["phis"], c=min_dists_at_step,
+                        cmap="RdYlGn", s=12, alpha=0.6)
+        cbar = plt.colorbar(sc, ax=ax, shrink=0.6, pad=0.02)
+        cbar.set_label("Min Obs Dist (m)", fontsize=10)
+        ax.set_title(f"{scen['name']} -- Policy Map", fontsize=14)
+        ax.set_xlabel("Alpha", fontsize=12)
+        ax.set_ylabel("Phi", fontsize=12)
+        ax.grid(True, alpha=0.3)
+
+        fig_s.tight_layout()
+        fname = f"scenario_{i+1}_{name}.png"
+        fig_s.savefig(os.path.join(scenario_dir, fname), bbox_inches="tight", dpi=150)
+        plt.close(fig_s)
+        print(f"Saved: plots/scenarios/{fname}")
+
+    # =====================================================================
     # AGGREGATE POLICY MAP: Alpha & Phi vs Distance (all scenarios)
     # =====================================================================
     fig_agg, (ax_alpha, ax_phi) = plt.subplots(1, 2, figsize=(18, 8))

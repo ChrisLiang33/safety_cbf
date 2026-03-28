@@ -222,6 +222,78 @@ if __name__ == "__main__":
     print("Saved: plots/combined_scenarios.png")
 
     # =====================================================================
+    # PER-SCENARIO INDIVIDUAL PLOTS
+    # =====================================================================
+    scenario_dir = os.path.join(save_dir, "scenarios")
+    os.makedirs(scenario_dir, exist_ok=True)
+
+    for i, data in enumerate(all_scenarios):
+        scen, r = data["scen"], data["result"]
+        name = scen["name"].replace(" ", "_")
+
+        fig_s, axs_s = plt.subplots(1, 3, figsize=(21, 7),
+                                     gridspec_kw={"width_ratios": [1.4, 1, 1]})
+
+        # --- Column 1: Trajectory ---
+        ax = axs_s[0]
+        for j in range(3):
+            ax.add_patch(plt.Circle(scen["obs"][j], OBS_RADIUS, color="red", alpha=0.2))
+        ax.add_patch(plt.Circle(scen["target_pos"], scen["target_radius"],
+                                color="green", alpha=0.3))
+
+        ax.plot(r["traj_x"], r["traj_y"], color="black", linewidth=2, zorder=5)
+
+        for t in range(0, len(r["traj_x"]) - 1, TIME_MARKER_INTERVAL):
+            ax.plot(r["traj_x"][t], r["traj_y"][t], marker='s', color='black',
+                    markersize=5, zorder=6)
+            ax.text(r["traj_x"][t], r["traj_y"][t] + 0.8, f"t={t}", fontsize=9,
+                    color='black', ha='center', zorder=7)
+
+        status = ("REACHED" if r["reached_target"] else "FAIL") + \
+                 (" COLLISION" if r["collided"] else "")
+        ax.set_title(f"{scen['name']} -- {status}", fontsize=14)
+        ax.set_xlabel("x (m)", fontsize=12)
+        ax.set_ylabel("y (m)", fontsize=12)
+        ax.set_xlim(-5, 110)
+        ax.set_ylim(-16, 16)
+        ax.set_aspect("equal", adjustable="box")
+        ax.grid(True, alpha=0.3)
+
+        metrics_text = (f"Steps: {r['steps']}  Reward: {r['total_reward']:.0f}  "
+                        f"MinClearance: {r['min_clearance']:.2f}m  Efficiency: {r['path_efficiency']:.2f}")
+        ax.text(0.02, -0.10, metrics_text, transform=ax.transAxes, fontsize=9,
+                fontfamily='monospace',
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='lightyellow', alpha=0.9))
+
+        # --- Column 2: Speed ---
+        ax = axs_s[1]
+        ax.plot(r["speeds"], color="black", linewidth=2)
+        ax.axhline(3.0, color="gray", linewidth=0.8, linestyle=":", alpha=0.4, label="Max")
+        ax.set_title(f"{scen['name']} -- Speed", fontsize=14)
+        ax.set_xlabel("Time Step", fontsize=12)
+        ax.set_ylabel("Speed (m/s)", fontsize=12)
+        ax.set_ylim(-0.1, 4.5)
+        ax.grid(True, alpha=0.3)
+
+        # --- Column 3: Distance to obstacles ---
+        ax = axs_s[2]
+        for oi in range(3):
+            ax.plot(r["per_obs_dists"][oi], color=OBS_COLORS[oi], linewidth=1.5,
+                    label=OBS_LABELS[oi])
+        ax.axhline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
+        ax.set_title(f"{scen['name']} -- Distance to Obstacles", fontsize=14)
+        ax.set_xlabel("Time Step", fontsize=12)
+        ax.set_ylabel("Distance to surface (m)", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right", fontsize=10)
+
+        fig_s.tight_layout()
+        fname = f"scenario_{i+1}_{name}.png"
+        fig_s.savefig(os.path.join(scenario_dir, fname), bbox_inches="tight", dpi=150)
+        plt.close(fig_s)
+        print(f"Saved: plots/scenarios/{fname}")
+
+    # =====================================================================
     # AGGREGATE POLICY MAP: Speed vs Distance (all hand-picked scenarios)
     # =====================================================================
     fig, ax = plt.subplots(1, 1, figsize=(10, 8))
