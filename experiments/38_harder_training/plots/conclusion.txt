@@ -1,0 +1,10 @@
+TLDR: [TO FILL after results]
+
+Experiment 38: Harder Training Conditions
+==========================================
+Key change: bias U(0.5,1.5), radius error U(-2,0) always underestimate.
+Also: random obs radius U(3,7).
+Does more frequent collision exposure teach phi to be adaptive?
+
+Observations:
+[TO FILL]

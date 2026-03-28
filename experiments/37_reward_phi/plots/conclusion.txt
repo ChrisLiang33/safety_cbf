@@ -1,0 +1,10 @@
+TLDR: [TO FILL after results]
+
+Experiment 37: Reward Bonus for Safety Margin
+===============================================
+Key change: reward += min_obs_dist * 2.0 when within 10m of obstacles.
+Also: random obs radius U(3,7), bias U(0,1), radius error U(-1,+1).
+Does the reward bonus teach phi to increase near obstacles?
+
+Observations:
+[TO FILL]
