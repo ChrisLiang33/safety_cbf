@@ -1,0 +1,30 @@
+TLDR: [TO FILL after results]
+
+Experiment 28: Fixed Alpha + Learned Phi Only
+===============================================
+
+Question:
+In previous experiments, the policy could adjust alpha to handle obstacles instead
+of using phi — making phi redundant. If we FIX alpha at 1.0 and only let the policy
+learn [kx, ky, phi], does phi show strong obstacle-adaptive behavior?
+
+Hypothesis:
+With alpha fixed, phi is the ONLY safety tuning knob. The policy MUST learn to:
+  - Increase phi near obstacles (tighten CBF constraint → extra margin)
+  - Decrease phi far from obstacles (relax constraint → move freely)
+If the policy still doesn't show this correlation, the problem is in the learning
+signal itself (e.g., progress reward fighting against phi).
+
+Setup:
+- Action space: [kx, ky, phi] — alpha = 1.0 (FIXED, not learned)
+- ISSf-CBF: Lgh @ u >= -1.0 * h(x) + (||Lgh||^2 * phi) / h(x)
+- Radius noise: error ~ U(-1.0, +1.0) per obstacle per episode
+- Constant bias: magnitude ~ U(0.0, 1.0), random direction per episode
+- Randomized obstacle placement
+- Eval: error=-1.0, bias=0.7 upward
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]

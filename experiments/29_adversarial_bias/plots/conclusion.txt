@@ -1,0 +1,30 @@
+TLDR: [TO FILL after results]
+
+Experiment 29: Adversarial Bias (Always Toward Nearest Obstacle)
+=================================================================
+
+Question:
+With constant bias (exp 22), the bias direction was random per episode. Some episodes
+the bias pushes away from obstacles (easy). With ADVERSARIAL bias, the disturbance
+ALWAYS pushes the robot toward the nearest obstacle — every step, worst case.
+Does this force phi to be essential for survival?
+
+Key difference from constant bias:
+- Constant bias: fixed direction per episode, sometimes helpful, sometimes harmful
+- Adversarial bias: direction updates each step to always push toward nearest obstacle
+- This is NOT i.i.d. noise — it's systematically worst-case, CLT does not apply
+- The bias magnitude is sampled once per episode ~ U(0.0, 1.0)
+
+Setup:
+- Action space: [kx, ky, alpha, phi]
+- ISSf-CBF: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
+- Adversarial bias: magnitude per episode, direction = toward nearest obstacle each step
+- Radius noise: error ~ U(-1.0, +1.0) per obstacle per episode
+- Randomized obstacle placement
+- Eval: bias magnitude=0.7, error=-1.0
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]

@@ -1,0 +1,31 @@
+TLDR: [TO FILL after results]
+
+Experiment 30: 6 Dense Obstacles + Radius Noise + Constant Bias
+=================================================================
+
+Question:
+With only 3 obstacles, the robot often has wide open paths. With 6 obstacles,
+the environment is much denser — tighter gaps, more constrained navigation.
+Does the higher obstacle density force phi to show stronger adaptive behavior?
+
+Hypothesis:
+More obstacles = more CBF constraints active simultaneously. When the robot
+must thread through narrow gaps between multiple obstacles, phi's robustness
+margin becomes critical. The policy should learn to increase phi when multiple
+obstacles are nearby.
+
+Setup:
+- 6 obstacles (not 3), true radius=5.0 each
+- Action space: [kx, ky, alpha, phi]
+- ISSf-CBF: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
+- Radius noise: error ~ U(-1.0, +1.0) per obstacle per episode
+- Constant bias: magnitude ~ U(0.0, 1.0), random direction per episode
+- Randomized placement, min_spacing=11m (tighter than 3-obs experiments)
+- Observation: 23 dims (6*3 + 3 + 2)
+- Eval: error=-1.0, bias=0.7 upward
+
+Observations:
+[TO FILL]
+
+Conclusion:
+[TO FILL]
