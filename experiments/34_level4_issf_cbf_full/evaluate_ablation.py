@@ -10,8 +10,7 @@ Combined uncertainty:
 
 Outputs:
   plots/combined_scenarios.png  (6-col: traj | alpha+phi+obszone | speed | alpha vs dist | phi vs dist | policy map)
-  plots/aggregate_metrics.png
-  plots/conclusion.txt
+  plots/aggregate_policy_map.png  (2-col: alpha vs dist | phi vs dist, all scenarios)
 """
 import numpy as np
 import matplotlib
@@ -335,91 +334,47 @@ if __name__ == "__main__":
     print("Saved: plots/combined_scenarios.png")
 
     # =====================================================================
-    # BATCH: 100 random scenarios
+    # AGGREGATE POLICY MAP: Alpha & Phi vs Distance (all scenarios)
     # =====================================================================
-    print(f"\nRunning {N_RANDOM_SCENARIOS} random scenarios...")
-    random_scenarios = generate_random_scenarios(N_RANDOM_SCENARIOS)
+    danger_zone = -EVAL_RADIUS_ERROR  # distance where true surface is (1.0m)
 
-    agg = {"success": 0, "collisions": 0, "min_clearances": [], "efficiencies": [],
-           "steps": [], "avg_speeds": []}
+    fig_agg, (ax_alpha, ax_phi) = plt.subplots(1, 2, figsize=(18, 8))
+    fig_agg.suptitle("Level 4 (ISSf-CBF): Alpha & Phi vs Distance to Nearest Obstacle (all scenarios)",
+                     fontsize=14)
 
-    for idx, scen in enumerate(random_scenarios):
-        if (idx + 1) % 20 == 0:
-            print(f"  {idx + 1}/{N_RANDOM_SCENARIOS}...")
-        result = run_episode(env, model, scen, bias=scen["bias"],
-                             radius_error=scen["radius_error"])
-        agg["success"] += int(result["reached_target"])
-        agg["collisions"] += int(result["collided"])
-        agg["min_clearances"].append(result["min_clearance"])
-        agg["efficiencies"].append(result["path_efficiency"])
-        agg["steps"].append(result["steps"])
-        agg["avg_speeds"].append(np.mean(result["speeds"]))
+    colors = plt.cm.tab10(np.linspace(0, 1, len(all_scenarios)))
 
-    # =====================================================================
-    # AGGREGATE METRICS PLOT
-    # =====================================================================
-    fig, axs_agg = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle(f"LEVEL 4: ISSf-CBF (alpha+phi) -- {N_RANDOM_SCENARIOS} Random Scenarios "
-                 f"(bias={EVAL_BIAS_MAGNITUDE}, radius_err={EVAL_RADIUS_ERROR})",
-                 fontsize=16)
+    for idx, data in enumerate(all_scenarios):
+        scen, r = data["scen"], data["result"]
+        label = scen["name"]
+        c = colors[idx]
 
-    ax = axs_agg[0, 0]
-    val = agg["success"] / N_RANDOM_SCENARIOS * 100
-    ax.bar([0], [val], color="forestgreen", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Success Rate (%)")
-    ax.set_title("Target Reached")
-    ax.set_xticks([0]); ax.set_xticklabels(["ISSf-CBF"], fontsize=9)
-    ax.set_ylim(0, 110)
-    ax.text(0, val + 2, f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
+        # Min distance to obstacle surface (TRUE) per timestep
+        dists = r["dist"]
+        n = min(len(dists), len(r["alphas"]))
 
-    ax = axs_agg[0, 1]
-    val = agg["collisions"] / N_RANDOM_SCENARIOS * 100
-    ax.bar([0], [val], color="forestgreen", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Collision Rate (%)")
-    ax.set_title("Collisions (phi should help!)")
-    ax.set_xticks([0]); ax.set_xticklabels(["ISSf-CBF"], fontsize=9)
-    ax.set_ylim(0, max(val * 1.3, 10))
-    ax.text(0, val + 0.5, f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
+        ax_alpha.scatter(dists[:n], r["alphas"][:n], color=c, s=8, alpha=0.5, label=label)
+        ax_phi.scatter(dists[:n], r["phis"][:n], color=c, s=8, alpha=0.5, label=label)
 
-    ax = axs_agg[0, 2]
-    val = np.mean(agg["min_clearances"])
-    ax.bar([0], [val], color="forestgreen", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Min Clearance (m)")
-    ax.set_title("Safety Margin")
-    ax.set_xticks([0]); ax.set_xticklabels(["ISSf-CBF"], fontsize=9)
-    ax.axhline(0, color="red", linewidth=1, linestyle=":")
-    ax.text(0, val + 0.02, f"{val:.2f}", ha="center", fontsize=10)
+    # Vertical reference lines
+    for ax in (ax_alpha, ax_phi):
+        ax.axvline(0, color="red", linewidth=1.5, label="True surface (collision)")
+        ax.axvline(danger_zone, color="orange", linewidth=1.5, linestyle="--",
+                   label=f"Danger zone ({danger_zone:.1f}m)")
+        ax.set_xlabel("Min Distance to Obstacle Surface (m)")
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=7, loc="upper right", ncol=2)
 
-    ax = axs_agg[1, 0]
-    val = np.mean(agg["efficiencies"])
-    ax.bar([0], [val], color="forestgreen", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Path Length / Straight-Line")
-    ax.set_title("Path Efficiency")
-    ax.set_xticks([0]); ax.set_xticklabels(["ISSf-CBF"], fontsize=9)
-    ax.axhline(1.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
-    ax.text(0, val + 0.01, f"{val:.2f}", ha="center", fontsize=10)
+    ax_alpha.set_ylabel("Alpha")
+    ax_alpha.set_title("Alpha vs Distance")
+    ax_phi.set_ylabel("Phi")
+    ax_phi.set_title("Phi vs Distance")
 
-    ax = axs_agg[1, 1]
-    val = np.mean(agg["steps"])
-    ax.bar([0], [val], color="forestgreen", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Steps")
-    ax.set_title("Episode Length")
-    ax.set_xticks([0]); ax.set_xticklabels(["ISSf-CBF"], fontsize=9)
-    ax.text(0, val + 1, f"{val:.0f}", ha="center", fontsize=10)
-
-    ax = axs_agg[1, 2]
-    val = np.mean(agg["avg_speeds"])
-    ax.bar([0], [val], color="forestgreen", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Speed (m/s)")
-    ax.set_title("Average Speed")
-    ax.set_xticks([0]); ax.set_xticklabels(["ISSf-CBF"], fontsize=9)
-    ax.axhline(3.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
-    ax.text(0, val + 0.02, f"{val:.2f}", ha="center", fontsize=10)
-
-    fig.tight_layout()
-    fig.savefig(os.path.join(save_dir, "aggregate_metrics.png"), bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print("Saved: plots/aggregate_metrics.png")
+    fig_agg.tight_layout()
+    fig_agg.savefig(os.path.join(save_dir, "aggregate_policy_map.png"),
+                    bbox_inches="tight", dpi=150)
+    plt.close(fig_agg)
+    print("Saved: plots/aggregate_policy_map.png")
 
     # =====================================================================
     # Console summary
@@ -438,51 +393,5 @@ if __name__ == "__main__":
               f"{'YES' if r['collided'] else 'No':>9} "
               f"{r['min_clearance']:>9.3f} {r['steps']:>7} "
               f"{np.mean(r['speeds']):>8.2f} {r['path_efficiency']:>9.2f}")
-
-    print(f"\n{'='*80}")
-    print(f"AGGREGATE ({N_RANDOM_SCENARIOS} RANDOM SCENARIOS)")
-    print(f"{'='*80}")
-    print(f"  Success:       {agg['success']}/{N_RANDOM_SCENARIOS} ({agg['success']/N_RANDOM_SCENARIOS*100:.0f}%)")
-    print(f"  Collisions:    {agg['collisions']}/{N_RANDOM_SCENARIOS} ({agg['collisions']/N_RANDOM_SCENARIOS*100:.0f}%)")
-    print(f"  Avg Min Dist:  {np.mean(agg['min_clearances']):.3f}m")
-    print(f"  Avg Steps:     {np.mean(agg['steps']):.1f}")
-    print(f"  Avg Speed:     {np.mean(agg['avg_speeds']):.2f} m/s")
-    print(f"  Avg Path Eff:  {np.mean(agg['efficiencies']):.2f}")
-
-    # =====================================================================
-    # Conclusion
-    # =====================================================================
-    conclusion = f"""Level 4: ISSf-CBF with Alpha + Phi -- Evaluation Results
-=========================================================
-
-Setup:
-  - Action: [kx, ky, alpha, phi] -- full ISSf-CBF with learnable robustness margin
-  - ISSf-CBF constraint: Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / h(x)
-  - Constant bias disturbance: magnitude={EVAL_BIAS_MAGNITUDE}, hand-picked=upward (pi/2)
-  - Radius estimation error: hand-picked={EVAL_RADIUS_ERROR}m (true=5.0, estimated=4.0)
-  - Random scenarios: bias angle U(0,2pi), radius error U(-1,0)
-  - Combined uncertainty: dynamics mismatch + perception error
-  - {N_RANDOM_SCENARIOS} random scenarios + {len(SCENARIOS)} hand-picked scenarios
-
-Aggregate Results ({N_RANDOM_SCENARIOS} random scenarios):
-  - Success rate:      {agg['success']}/{N_RANDOM_SCENARIOS} ({agg['success']/N_RANDOM_SCENARIOS*100:.0f}%)
-  - Collision rate:    {agg['collisions']}/{N_RANDOM_SCENARIOS} ({agg['collisions']/N_RANDOM_SCENARIOS*100:.0f}%)
-  - Avg min clearance: {np.mean(agg['min_clearances']):.3f}m
-  - Avg steps:         {np.mean(agg['steps']):.1f}
-  - Avg speed:         {np.mean(agg['avg_speeds']):.2f} m/s
-  - Avg path eff:      {np.mean(agg['efficiencies']):.2f}
-
-Key Question: Does phi finally show adaptive behavior with both sources of uncertainty?
-  - Collision rate: {agg['collisions']/N_RANDOM_SCENARIOS*100:.0f}%
-  - The ISSf-CBF adds a robustness margin: (||Lgh||^2 * phi) / h(x).
-  - This margin grows when close to obstacles (small h) and when phi is large.
-  - With BOTH dynamics mismatch (bias) AND perception error (wrong radius),
-    the phi term should be essential for maintaining safety.
-  - Compare to Level 3 (alpha-only with bias): does phi reduce collisions?
-  - The policy should learn to increase phi near obstacles when uncertainty is high.
-"""
-    with open(os.path.join(save_dir, "conclusion.txt"), "w") as f:
-        f.write(conclusion)
-    print(f"Saved: plots/conclusion.txt")
 
     print(f"\nDone! Plots saved to {save_dir}")

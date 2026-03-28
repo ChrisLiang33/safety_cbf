@@ -222,89 +222,32 @@ if __name__ == "__main__":
     print("Saved: plots/combined_scenarios.png")
 
     # =====================================================================
-    # BATCH: 100 random scenarios
+    # AGGREGATE POLICY MAP: Speed vs Distance (all hand-picked scenarios)
     # =====================================================================
-    print(f"\nRunning {N_RANDOM_SCENARIOS} random scenarios...")
-    random_scenarios = generate_random_scenarios(N_RANDOM_SCENARIOS)
+    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+    fig.suptitle("NAVIGATION BASELINE: Speed vs Distance to Nearest Obstacle (all scenarios)",
+                 fontsize=14)
 
-    agg = {"success": 0, "collisions": 0, "min_clearances": [], "efficiencies": [],
-           "steps": [], "avg_speeds": []}
+    for data in all_scenarios:
+        scen, r = data["scen"], data["result"]
+        min_dists = np.array(r["dist"])
+        speeds_arr = np.array(r["speeds"])
+        n = min(len(min_dists), len(speeds_arr))
+        ax.scatter(min_dists[:n], speeds_arr[:n], s=8, alpha=0.3, label=scen["name"])
 
-    for idx, scen in enumerate(random_scenarios):
-        if (idx + 1) % 20 == 0:
-            print(f"  {idx + 1}/{N_RANDOM_SCENARIOS}...")
-        result = run_episode(env, model, scen)
-        agg["success"] += int(result["reached_target"])
-        agg["collisions"] += int(result["collided"])
-        agg["min_clearances"].append(result["min_clearance"])
-        agg["efficiencies"].append(result["path_efficiency"])
-        agg["steps"].append(result["steps"])
-        agg["avg_speeds"].append(np.mean(result["speeds"]))
-
-    # =====================================================================
-    # AGGREGATE METRICS PLOT
-    # =====================================================================
-    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle(f"NAVIGATION BASELINE (no CBF): {N_RANDOM_SCENARIOS} Random Scenarios",
-                 fontsize=16)
-
-    ax = axs[0, 0]
-    val = agg["success"] / N_RANDOM_SCENARIOS * 100
-    ax.bar([0], [val], color="black", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Success Rate (%)")
-    ax.set_title("Target Reached")
-    ax.set_xticks([0]); ax.set_xticklabels(["No CBF"], fontsize=9)
-    ax.set_ylim(0, 110)
-    ax.text(0, val + 2, f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
-
-    ax = axs[0, 1]
-    val = agg["collisions"] / N_RANDOM_SCENARIOS * 100
-    ax.bar([0], [val], color="black", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Collision Rate (%)")
-    ax.set_title("Collisions (no CBF protection!)")
-    ax.set_xticks([0]); ax.set_xticklabels(["No CBF"], fontsize=9)
-    ax.set_ylim(0, max(val * 1.3, 10))
-    ax.text(0, val + 0.5, f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
-
-    ax = axs[0, 2]
-    val = np.mean(agg["min_clearances"])
-    ax.bar([0], [val], color="black", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Min Clearance (m)")
-    ax.set_title("Safety Margin")
-    ax.set_xticks([0]); ax.set_xticklabels(["No CBF"], fontsize=9)
-    ax.axhline(0, color="red", linewidth=1, linestyle=":")
-    ax.text(0, val + 0.02, f"{val:.2f}", ha="center", fontsize=10)
-
-    ax = axs[1, 0]
-    val = np.mean(agg["efficiencies"])
-    ax.bar([0], [val], color="black", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Path Length / Straight-Line")
-    ax.set_title("Path Efficiency")
-    ax.set_xticks([0]); ax.set_xticklabels(["No CBF"], fontsize=9)
-    ax.axhline(1.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
-    ax.text(0, val + 0.01, f"{val:.2f}", ha="center", fontsize=10)
-
-    ax = axs[1, 1]
-    val = np.mean(agg["steps"])
-    ax.bar([0], [val], color="black", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Steps")
-    ax.set_title("Episode Length")
-    ax.set_xticks([0]); ax.set_xticklabels(["No CBF"], fontsize=9)
-    ax.text(0, val + 1, f"{val:.0f}", ha="center", fontsize=10)
-
-    ax = axs[1, 2]
-    val = np.mean(agg["avg_speeds"])
-    ax.bar([0], [val], color="black", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Speed (m/s)")
-    ax.set_title("Average Speed")
-    ax.set_xticks([0]); ax.set_xticklabels(["No CBF"], fontsize=9)
-    ax.axhline(3.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
-    ax.text(0, val + 0.02, f"{val:.2f}", ha="center", fontsize=10)
+    ax.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=12)
+    ax.set_ylabel("Speed (m/s)", fontsize=12)
+    ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision boundary")
+    ax.axhline(3.0, color="gray", linewidth=0.8, linestyle="--", alpha=0.4)
+    ax.set_xlim(-1, None)
+    ax.set_ylim(-0.1, 4.5)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="lower right", fontsize=7, ncol=2)
 
     fig.tight_layout()
-    fig.savefig(os.path.join(save_dir, "aggregate_metrics.png"), bbox_inches="tight", dpi=150)
+    fig.savefig(os.path.join(save_dir, "aggregate_policy_map.png"), bbox_inches="tight", dpi=150)
     plt.close(fig)
-    print("Saved: plots/aggregate_metrics.png")
+    print("Saved: plots/aggregate_policy_map.png")
 
     # =====================================================================
     # Console summary
@@ -323,15 +266,5 @@ if __name__ == "__main__":
               f"{'YES' if r['collided'] else 'No':>9} "
               f"{r['min_clearance']:>9.3f} {r['steps']:>7} "
               f"{np.mean(r['speeds']):>8.2f} {r['path_efficiency']:>9.2f}")
-
-    print(f"\n{'='*80}")
-    print(f"AGGREGATE ({N_RANDOM_SCENARIOS} RANDOM SCENARIOS)")
-    print(f"{'='*80}")
-    print(f"  Success:       {agg['success']}/{N_RANDOM_SCENARIOS} ({agg['success']/N_RANDOM_SCENARIOS*100:.0f}%)")
-    print(f"  Collisions:    {agg['collisions']}/{N_RANDOM_SCENARIOS} ({agg['collisions']/N_RANDOM_SCENARIOS*100:.0f}%)")
-    print(f"  Avg Min Dist:  {np.mean(agg['min_clearances']):.3f}m")
-    print(f"  Avg Steps:     {np.mean(agg['steps']):.1f}")
-    print(f"  Avg Speed:     {np.mean(agg['avg_speeds']):.2f} m/s")
-    print(f"  Avg Path Eff:  {np.mean(agg['efficiencies']):.2f}")
 
     print(f"\nDone! Plots saved to {save_dir}")

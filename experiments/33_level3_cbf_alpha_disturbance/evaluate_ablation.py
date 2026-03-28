@@ -5,8 +5,7 @@ Constant bias breaks the CBF model assumption (x_dot = u, but reality is x_dot =
 
 Outputs:
   plots/combined_scenarios.png  (5-col: traj | alpha+obszone | speed | alpha vs dist | policy map)
-  plots/aggregate_metrics.png
-  plots/conclusion.txt
+  plots/aggregate_policy_map.png
 """
 import numpy as np
 import matplotlib
@@ -21,7 +20,6 @@ from env_dynamic import Level3CBFDisturbanceEnv
 # --- CONFIG ---
 MODEL_PATH = "./models_dynamic/dynamic_5000k_model"
 MAX_STEPS = 600
-N_RANDOM_SCENARIOS = 100
 OBS_RADIUS = 5.0
 EVAL_BIAS_MAGNITUDE = 0.7
 
@@ -124,30 +122,6 @@ def run_episode(env, model, scen, bias=None):
         "path_efficiency": efficiency,
     }
 
-
-def generate_random_scenarios(n, seed=42):
-    rng = np.random.RandomState(seed)
-    scenarios = []
-    x_bands = [(15.0, 35.0), (40.0, 60.0), (65.0, 85.0)]
-    for i in range(n):
-        target_y = rng.uniform(-3.0, 3.0)
-        target_radius = rng.uniform(1.5, 3.0)
-        obs_list = []
-        for x_low, x_high in x_bands:
-            x = rng.uniform(x_low, x_high)
-            y = rng.uniform(-8.0, 8.0)
-            obs_list.append(np.array([x, y]))
-        # Random bias angle for each random scenario
-        bias_angle = rng.uniform(0, 2 * np.pi)
-        bias = EVAL_BIAS_MAGNITUDE * np.array([np.cos(bias_angle), np.sin(bias_angle)])
-        scenarios.append({
-            "name": f"Random_{i}",
-            "obs": obs_list,
-            "target_pos": np.array([100.0, target_y]),
-            "target_radius": target_radius,
-            "bias": bias,
-        })
-    return scenarios
 
 
 if __name__ == "__main__":
@@ -293,92 +267,34 @@ if __name__ == "__main__":
     print("Saved: plots/combined_scenarios.png")
 
     # =====================================================================
-    # BATCH: 100 random scenarios
+    # AGGREGATE POLICY MAP: Alpha vs Distance from ALL hand-picked scenarios
     # =====================================================================
-    print(f"\nRunning {N_RANDOM_SCENARIOS} random scenarios...")
-    random_scenarios = generate_random_scenarios(N_RANDOM_SCENARIOS)
+    fig_agg, ax_agg = plt.subplots(figsize=(10, 8))
+    scenario_colors = plt.cm.tab10(np.linspace(0, 1, len(all_scenarios)))
 
-    agg = {"success": 0, "collisions": 0, "min_clearances": [], "efficiencies": [],
-           "steps": [], "avg_speeds": []}
+    for i, data in enumerate(all_scenarios):
+        scen, r = data["scen"], data["result"]
+        ax_agg.scatter(
+            r["dist"], r["alphas"],
+            color=scenario_colors[i], s=12, alpha=0.6, label=scen["name"],
+        )
 
-    for idx, scen in enumerate(random_scenarios):
-        if (idx + 1) % 20 == 0:
-            print(f"  {idx + 1}/{N_RANDOM_SCENARIOS}...")
-        result = run_episode(env, model, scen, bias=scen["bias"])
-        agg["success"] += int(result["reached_target"])
-        agg["collisions"] += int(result["collided"])
-        agg["min_clearances"].append(result["min_clearance"])
-        agg["efficiencies"].append(result["path_efficiency"])
-        agg["steps"].append(result["steps"])
-        agg["avg_speeds"].append(np.mean(result["speeds"]))
-
-    # =====================================================================
-    # AGGREGATE METRICS PLOT
-    # =====================================================================
-    fig, axs_agg = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle(f"LEVEL 3: CBF + Alpha + Disturbance -- {N_RANDOM_SCENARIOS} Random Scenarios (bias={EVAL_BIAS_MAGNITUDE})",
-                 fontsize=16)
-
-    ax = axs_agg[0, 0]
-    val = agg["success"] / N_RANDOM_SCENARIOS * 100
-    ax.bar([0], [val], color="darkorange", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Success Rate (%)")
-    ax.set_title("Target Reached")
-    ax.set_xticks([0]); ax.set_xticklabels(["CBF+Alpha+Bias"], fontsize=9)
-    ax.set_ylim(0, 110)
-    ax.text(0, val + 2, f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
-
-    ax = axs_agg[0, 1]
-    val = agg["collisions"] / N_RANDOM_SCENARIOS * 100
-    ax.bar([0], [val], color="darkorange", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Collision Rate (%)")
-    ax.set_title("Collisions (CBF failing under bias?)")
-    ax.set_xticks([0]); ax.set_xticklabels(["CBF+Alpha+Bias"], fontsize=9)
-    ax.set_ylim(0, max(val * 1.3, 10))
-    ax.text(0, val + 0.5, f"{val:.0f}%", ha="center", fontsize=10, fontweight="bold")
-
-    ax = axs_agg[0, 2]
-    val = np.mean(agg["min_clearances"])
-    ax.bar([0], [val], color="darkorange", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Min Clearance (m)")
-    ax.set_title("Safety Margin")
-    ax.set_xticks([0]); ax.set_xticklabels(["CBF+Alpha+Bias"], fontsize=9)
-    ax.axhline(0, color="red", linewidth=1, linestyle=":")
-    ax.text(0, val + 0.02, f"{val:.2f}", ha="center", fontsize=10)
-
-    ax = axs_agg[1, 0]
-    val = np.mean(agg["efficiencies"])
-    ax.bar([0], [val], color="darkorange", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Path Length / Straight-Line")
-    ax.set_title("Path Efficiency")
-    ax.set_xticks([0]); ax.set_xticklabels(["CBF+Alpha+Bias"], fontsize=9)
-    ax.axhline(1.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
-    ax.text(0, val + 0.01, f"{val:.2f}", ha="center", fontsize=10)
-
-    ax = axs_agg[1, 1]
-    val = np.mean(agg["steps"])
-    ax.bar([0], [val], color="darkorange", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Steps")
-    ax.set_title("Episode Length")
-    ax.set_xticks([0]); ax.set_xticklabels(["CBF+Alpha+Bias"], fontsize=9)
-    ax.text(0, val + 1, f"{val:.0f}", ha="center", fontsize=10)
-
-    ax = axs_agg[1, 2]
-    val = np.mean(agg["avg_speeds"])
-    ax.bar([0], [val], color="darkorange", alpha=0.8, edgecolor="black")
-    ax.set_ylabel("Avg Speed (m/s)")
-    ax.set_title("Average Speed")
-    ax.set_xticks([0]); ax.set_xticklabels(["CBF+Alpha+Bias"], fontsize=9)
-    ax.axhline(3.0, color="gray", linewidth=1, linestyle="--", alpha=0.5)
-    ax.text(0, val + 0.02, f"{val:.2f}", ha="center", fontsize=10)
-
-    fig.tight_layout()
-    fig.savefig(os.path.join(save_dir, "aggregate_metrics.png"), bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print("Saved: plots/aggregate_metrics.png")
+    ax_agg.axvline(0, color="red", linewidth=1.5, linestyle="--", label="Collision boundary")
+    ax_agg.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=12)
+    ax_agg.set_ylabel("Alpha Value", fontsize=12)
+    ax_agg.set_title(
+        "Level 3 (CBF + alpha + bias): Alpha vs Distance to Nearest Obstacle (all scenarios)",
+        fontsize=13,
+    )
+    ax_agg.legend(fontsize=9, loc="best")
+    ax_agg.grid(True, alpha=0.3)
+    fig_agg.tight_layout()
+    fig_agg.savefig(os.path.join(save_dir, "aggregate_policy_map.png"), bbox_inches="tight", dpi=150)
+    plt.close(fig_agg)
+    print("Saved: plots/aggregate_policy_map.png")
 
     # =====================================================================
-    # Console summary
+    # Console summary table
     # =====================================================================
     print(f"\n{'='*80}")
     print(f"HAND-PICKED SCENARIOS (bias={EVAL_BIAS_MAGNITUDE}, upward)")
@@ -394,51 +310,5 @@ if __name__ == "__main__":
               f"{'YES' if r['collided'] else 'No':>9} "
               f"{r['min_clearance']:>9.3f} {r['steps']:>7} "
               f"{np.mean(r['speeds']):>8.2f} {r['path_efficiency']:>9.2f}")
-
-    print(f"\n{'='*80}")
-    print(f"AGGREGATE ({N_RANDOM_SCENARIOS} RANDOM SCENARIOS, bias={EVAL_BIAS_MAGNITUDE})")
-    print(f"{'='*80}")
-    print(f"  Success:       {agg['success']}/{N_RANDOM_SCENARIOS} ({agg['success']/N_RANDOM_SCENARIOS*100:.0f}%)")
-    print(f"  Collisions:    {agg['collisions']}/{N_RANDOM_SCENARIOS} ({agg['collisions']/N_RANDOM_SCENARIOS*100:.0f}%)")
-    print(f"  Avg Min Dist:  {np.mean(agg['min_clearances']):.3f}m")
-    print(f"  Avg Steps:     {np.mean(agg['steps']):.1f}")
-    print(f"  Avg Speed:     {np.mean(agg['avg_speeds']):.2f} m/s")
-    print(f"  Avg Path Eff:  {np.mean(agg['efficiencies']):.2f}")
-
-    # =====================================================================
-    # Conclusion
-    # =====================================================================
-    conclusion = f"""Level 3: CBF + Alpha + Disturbance -- Evaluation Results
-========================================================
-
-Setup:
-  - Action: [kx, ky, alpha] -- standard CBF with learnable alpha
-  - Standard CBF constraint: Lgh @ u >= -alpha * h(x)
-  - Constant bias disturbance: magnitude={EVAL_BIAS_MAGNITUDE}, hand-picked=upward (pi/2)
-  - Dynamics: robot_pos += safe_u * dt + bias * dt
-  - CBF assumes x_dot = u, but reality is x_dot = u + bias
-  - No radius noise. TRUE obs_radius = {OBS_RADIUS}
-  - {N_RANDOM_SCENARIOS} random scenarios (random bias angle) + {len(SCENARIOS)} hand-picked (upward bias)
-
-Aggregate Results ({N_RANDOM_SCENARIOS} random scenarios):
-  - Success rate:      {agg['success']}/{N_RANDOM_SCENARIOS} ({agg['success']/N_RANDOM_SCENARIOS*100:.0f}%)
-  - Collision rate:    {agg['collisions']}/{N_RANDOM_SCENARIOS} ({agg['collisions']/N_RANDOM_SCENARIOS*100:.0f}%)
-  - Avg min clearance: {np.mean(agg['min_clearances']):.3f}m
-  - Avg steps:         {np.mean(agg['steps']):.1f}
-  - Avg speed:         {np.mean(agg['avg_speeds']):.2f} m/s
-  - Avg path eff:      {np.mean(agg['efficiencies']):.2f}
-
-Key Question: Does the standard CBF start failing under bias?
-  - Collision rate: {agg['collisions']/N_RANDOM_SCENARIOS*100:.0f}%
-  - The CBF assumes x_dot = u, but the actual dynamics include an unmodeled bias.
-  - The QP solution satisfies Lgh @ u >= -alpha * h(x), but the actual state evolution
-    includes the bias term, so h_dot != Lgh @ u. The safety guarantee breaks.
-  - If collisions > 0%, this demonstrates that the standard CBF is INSUFFICIENT
-    when there is model mismatch (disturbance).
-  - This establishes the NEED for the phi robustness margin (Level 4 ISSf-CBF).
-"""
-    with open(os.path.join(save_dir, "conclusion.txt"), "w") as f:
-        f.write(conclusion)
-    print(f"Saved: plots/conclusion.txt")
 
     print(f"\nDone! Plots saved to {save_dir}")
