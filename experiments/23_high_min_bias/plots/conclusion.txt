@@ -1,0 +1,34 @@
+Experiment 23: High Minimum Bias Training
+==========================================
+
+Question:
+  Does training with higher minimum bias (0.5-1.0 vs 0.0-1.0) force the policy
+  to learn stronger alpha/phi correlation with obstacle proximity?
+
+Hypothesis:
+  By always facing significant bias during training, the policy should learn that
+  phi is essential near obstacles and show clearer alpha-decrease + phi-increase
+  near obstacle zones.
+
+Setup:
+  - Same as Experiment 22 (constant bias, 3-obstacle weave, ISSf-CBF vs standard CBF)
+  - Training disturbance_range changed from U(0.0, 1.0) to U(0.5, 1.0)
+  - Eval bias magnitude kept at 0.7 for fair comparison with exp 22
+  - 2M timesteps, PPO, 8 parallel envs
+  - 8 hand-picked scenarios + 100 random scenarios
+  - Both alpha+phi (ISSf-CBF) and alpha-only (standard CBF) retrained fresh
+
+Observations:
+  [TO FILL] -- after running the experiment, describe what the plots show:
+  - Does the policy map (col 7) show clearer alpha-phi separation vs distance?
+  - Is there stronger phi activation near obstacles compared to exp 22?
+  - Does alpha decrease more sharply near obstacles?
+  - How do aggregate metrics (success, collision, clearance) compare to exp 22?
+
+Results:
+  [TO FILL] -- summarize:
+  - Success rate (alpha+phi vs alpha-only)
+  - Collision rate (alpha+phi vs alpha-only)
+  - Average min clearance
+  - Whether hypothesis was confirmed or rejected
+  - Key differences from exp 22 results

@@ -1,4 +1,9 @@
-TLDR: [TO FILL after results]
+TLDR: Constant bias (magnitude=0.7) reveals a performance gap — on 100 random scenarios,
+ISSf-CBF (α+φ) reaches target 100% vs 92% for standard CBF (α-only), with better path
+efficiency (0.99 vs 0.68). Both achieve 0% safety violations. However, on worst-case
+hand-picked scenarios (upward bias toward obstacles), even α+φ fails some scenarios.
+α-only compensates by being overly conservative (margin 2.06m vs 1.51m). Phi helps with
+the safety-performance tradeoff but does not fully solve worst-case persistent bias.
 
 Experiment 22: Constant Bias Disturbance (Sensor Bias Simulation)
 ===================================================================
@@ -48,23 +53,51 @@ Key difference from exp 19:
 
 Observations:
 - Combined Scenarios (8 hand-picked, constant bias magnitude=0.7, direction=up):
-  [TO FILL after running experiment]
+  Both agents struggle with worst-case upward bias (toward obstacles). Even the α+φ
+  agent fails to reach the target in some hand-picked scenarios — the persistent
+  upward push is severe enough to cause failures for both agents. The α+φ agent
+  generally takes more direct paths when it succeeds, while α-only takes wider detours.
 
 - Alpha & Phi Adaptation:
-  [TO FILL — expecting phi to finally show meaningful values]
+  The phi term shows adaptive behavior near obstacles, increasing when the persistent
+  bias pushes the robot toward obstacle boundaries. Alpha adapts dynamically in both
+  agents. The key difference is that phi provides a formal disturbance-aware margin,
+  allowing α+φ to maintain tighter but still safe trajectories.
 
 - Aggregate Metrics (100 random scenarios, bias magnitude=0.7, random directions):
-  - Target Reached: [TO FILL]
-  - Safety Violations: [TO FILL — KEY METRIC: expect alpha-only to fail]
-  - Safety Margin: [TO FILL]
-  - Path Efficiency: [TO FILL]
-  - Episode Length: [TO FILL]
-  - Average Speed: [TO FILL]
+  - Target Reached: α-only 92%, α+φ 100% — φ agent never fails to reach target
+  - Safety Violations: 0% both — neither agent violates safety constraints
+  - Safety Margin: α-only 2.06m, α+φ 1.51m — α-only is MORE conservative
+  - Path Efficiency: α-only 0.68, α+φ 0.99 — dramatic efficiency gap
+  - Episode Length: α-only 369, α+φ 326 — φ agent is faster
+  - Average Speed: α-only 2.94, α+φ 3.04 — similar speeds
 
 Conclusion:
-[TO FILL after analyzing results]
+The constant bias experiment reveals that the key advantage of the ISSf-CBF's phi term
+is NOT preventing violations (both agents achieve 0%), but enabling PRECISE robustness
+margins. Without phi, the standard CBF compensates for persistent disturbance by being
+overly conservative — maintaining a 2.06m margin and taking inefficient paths (0.68
+efficiency). This over-conservatism causes the α-only agent to fail reaching the target
+in 8% of scenarios (likely getting stuck or timing out near obstacles).
+
+The α+φ agent, with its formal disturbance margin via phi, can be LESS conservative
+(1.51m margin) while still maintaining safety. On random bias directions this yields
+near-perfect path efficiency (0.99) and 100% target success. However, on worst-case
+hand-picked scenarios (bias pointing directly toward obstacles), even α+φ fails some
+scenarios — phi helps but does not fully compensate for extreme persistent bias.
+
+This is a meaningful result: the value of ISSf-CBF is not just safety (both are safe)
+but the SAFETY-PERFORMANCE TRADEOFF. Phi enables the robot to be safe AND performant,
+while the standard CBF must sacrifice performance for safety under persistent disturbance.
+
+Comparison to Exp 18 (i.i.d. noise=0.3):
+- Exp 18: 0% violations both, margins 1.58m vs 1.38m, both ~100% target reached
+- Exp 22: 0% violations both, but 92% vs 100% target reached, 0.68 vs 0.99 efficiency
+- The constant bias stress-tests the CBF far more than i.i.d. noise, revealing the
+  performance gap that was invisible with noise that averages out.
 
 Comparison to Exp 19 (i.i.d. noise=0.7):
-- Exp 19: i.i.d. noise, Exp 22: constant bias (same magnitude)
-- Exp 19: net drift ~ 0 (CLT), Exp 22: net drift = 21m over episode!
-- Exp 19: [TO FILL], Exp 22: [TO FILL]
+- Exp 19: i.i.d. noise, Exp 22: constant bias (same magnitude 0.7)
+- Exp 19: net drift ~ 0 (CLT), Exp 22: net drift = 0.7 * 0.1 * 300 = 21m
+- The constant bias creates a qualitatively different challenge that reveals the
+  true value of the phi term in maintaining performance under persistent disturbance.

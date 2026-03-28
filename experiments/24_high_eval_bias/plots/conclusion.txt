@@ -1,0 +1,41 @@
+Experiment 24: High Eval Bias (1.5) -- Constant Bias with OOD Evaluation
+=========================================================================
+
+Question:
+  Does evaluating at higher bias (1.5 vs 0.7) reveal stronger alpha/phi
+  correlation with obstacle proximity, even with the same trained policy?
+
+Hypothesis:
+  Under more extreme persistent bias (1.5, well above training max of 1.0),
+  the policy should be forced to rely more heavily on phi near obstacles,
+  revealing whether the correlation exists but was masked at lower eval bias.
+
+Note:
+  Eval bias 1.5 is OUT OF DISTRIBUTION -- training max was 1.0. This tests
+  generalization of the learned alpha+phi policy to unseen disturbance levels.
+
+Setup:
+  - Copy of experiment 22 (constant bias) with ONE change: eval bias = 1.5
+  - Training: disturbance_range = (0.0, 1.0) -- identical to exp 22
+  - Eval: EVAL_BIAS_MAGNITUDE = 1.5 (was 0.7 in exp 22)
+  - Bias type: constant per episode (random direction, fixed magnitude)
+  - Methods compared:
+      1. Dynamic alpha+phi (ISSf-CBF): agent controls [kx, ky, alpha, phi]
+      2. Dynamic alpha-only (standard CBF): agent controls [kx, ky, alpha]
+  - 8 hand-picked scenarios (worst-case upward bias) + 100 random scenarios
+  - 2M training timesteps per model, PPO, 8 parallel envs
+
+Observations:
+  [TO FILL after running experiment]
+
+Results:
+  [TO FILL after running experiment]
+
+  Hand-picked scenarios:
+    [TO FILL]
+
+  Aggregate (100 random):
+    [TO FILL]
+
+  Comparison with exp 22 (eval bias 0.7):
+    [TO FILL]
