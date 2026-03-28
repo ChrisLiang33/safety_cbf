@@ -85,7 +85,7 @@ class Level3CBFDisturbanceEnv(gym.Env):
         bias_magnitude = self.np_random.uniform(
             self.bias_magnitude_range[0], self.bias_magnitude_range[1]
         )
-        angle = self.np_random.uniform(0, 2 * np.pi)
+        angle = self.np_random.uniform(0, 2 * np.pi) 
         self.bias = bias_magnitude * np.array([np.cos(angle), np.sin(angle)])
 
         self.prev_dist2target = np.linalg.norm(self.robot_pos - self.target_pos)
