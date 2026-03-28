@@ -5,19 +5,19 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from env_dynamic import NavigationBaselineEnv
 
 TOTAL_TIMESTEPS = 5_000_000
-N_ENVS = 8
+N_ENVS = 16
 
 if __name__ == "__main__":
     print("Training NAVIGATION BASELINE (kx, ky only, no CBF)...")
     print("  Direct control: robot_pos += [kx, ky] * dt")
     print("  No alpha, no phi, no QP safety filter")
     print("  Gentler randomization: obstacles in x-bands, y randomized")
-    print(f"  {TOTAL_TIMESTEPS/1e6:.0f}M timesteps")
+    print(f"  {TOTAL_TIMESTEPS/1e6:.0f}M timesteps, {N_ENVS} envs")
 
     env_fns = [lambda: NavigationBaselineEnv() for _ in range(N_ENVS)]
     vec_env = SubprocVecEnv(env_fns)
 
-    model = PPO("MlpPolicy", vec_env, verbose=1, device="cuda")
+    model = PPO("MlpPolicy", vec_env, verbose=1, device="cuda", n_steps=4096)
 
     start = time.time()
     model.learn(total_timesteps=TOTAL_TIMESTEPS)
