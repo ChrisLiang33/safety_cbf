@@ -1,11 +1,12 @@
 """
-Exp 39: Curriculum -- evaluate with bias + radius noise at hard phase (phase=3).
-Action is [kx, ky, alpha, phi]. QP enforces safety with robustness margin.
+Exp 43: Fixed Alpha=1.0, Phi Only -- evaluate with bias + radius noise.
+Action is [kx, ky, phi]. Alpha is fixed (FIXED_ALPHA from env).
+QP enforces safety with robustness margin.
 
 Outputs:
-  plots/combined_scenarios.png  (6-col: traj | alpha+phi+obszone | speed | alpha vs dist | phi vs dist | policy map)
+  plots/combined_scenarios.png  (6-col: traj | phi+alpha_line+obszone | speed | alpha_line+obs_dist | phi vs dist | policy map)
   plots/scenarios/scenario_*.png  (per-scenario individual plots)
-  plots/aggregate_policy_map.png  (2-col: alpha vs dist | phi vs dist, all scenarios)
+  plots/aggregate_policy_map.png  (phi vs dist, all scenarios)
 """
 import numpy as np
 import matplotlib
@@ -15,10 +16,10 @@ from matplotlib.collections import LineCollection
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import CurriculumEnv
+from env_dynamic import FixedAlphaPhiOnlyEnv, FIXED_ALPHA
 
 # --- CONFIG ---
-MODEL_PATH = "./models_dynamic/dynamic_5000k_model"
+MODEL_PATH = "./models_dynamic/dynamic_10000k_model"
 MAX_STEPS = 600
 TRUE_OBS_RADIUS = 5.0
 EVAL_BIAS_MAGNITUDE = 0.7
@@ -40,7 +41,6 @@ def generate_scenarios(n=10, seed=42):
             obs_list.append(np.array([x, y]))
         target_y = rng.uniform(-3.0, 3.0)
         target_radius = rng.uniform(1.5, 3.0)
-        # Random bias angle per scenario
         bias_angle = rng.uniform(0, 2 * np.pi)
         scenarios.append({
             "name": f"Random_{i+1}",
@@ -65,7 +65,6 @@ def setup_scenario(env, scen, bias_angle=None):
         env.bias = EVAL_BIAS_MAGNITUDE * np.array([np.cos(bias_angle), np.sin(bias_angle)])
     env.true_radius = [TRUE_OBS_RADIUS] * 3
     env.estimated_radius = [max(TRUE_OBS_RADIUS + EVAL_RADIUS_ERROR, 1.0)] * 3
-    env.phase = 3  # evaluate at hard phase
     return env._get_obs()
 
 
@@ -78,7 +77,7 @@ def path_length(traj_x, traj_y):
 def run_episode(env, model, scen, bias_angle=None):
     obs = setup_scenario(env, scen, bias_angle=bias_angle)
     traj_x, traj_y, speeds = [], [], []
-    alphas, phis = [], []
+    phis = []
     dist_list = []
     per_obs_dists = [[], [], []]
     total_reward = 0.0
@@ -95,8 +94,8 @@ def run_episode(env, model, scen, bias_angle=None):
             per_obs_dists[oi].append(dists[oi])
 
         action, _ = model.predict(obs, deterministic=True)
-        alphas.append(float(action[2]))
-        phis.append(float(action[3]))
+        # Action is [kx, ky, phi] -- alpha is FIXED_ALPHA (constant)
+        phis.append(float(action[2]))
         obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward
         speeds.append(np.linalg.norm(np.array([float(action[0]), float(action[1])])))
@@ -117,7 +116,7 @@ def run_episode(env, model, scen, bias_angle=None):
 
     return {
         "traj_x": traj_x, "traj_y": traj_y, "speeds": speeds,
-        "alphas": alphas, "phis": phis,
+        "phis": phis,
         "dist": dist_list, "per_obs_dists": per_obs_dists,
         "total_reward": total_reward, "steps": step + 1,
         "reached_target": reached, "collided": collided,
@@ -129,7 +128,7 @@ def run_episode(env, model, scen, bias_angle=None):
 def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsize_legend=None,
                     fontsize_metrics=7, fontsize_cbar=8, fontsize_bias=8, fontsize_radius=7,
                     fontsize_time=7, markersize=4):
-    """Plot trajectory column with alpha colormap, bias arrow, radius gap."""
+    """Plot trajectory column with phi colormap (alpha is fixed), bias arrow, radius gap."""
     fontsize_label = fontsize_label or fontsize_title
     est_radius = TRUE_OBS_RADIUS + EVAL_RADIUS_ERROR
 
@@ -142,16 +141,17 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
     ax.add_patch(plt.Circle(scen["target_pos"], scen["target_radius"],
                             color="green", alpha=0.3))
 
-    if len(r["traj_x"]) > 1 and len(r["alphas"]) > 0:
+    # Colormap uses phi instead of alpha (since alpha is constant)
+    if len(r["traj_x"]) > 1 and len(r["phis"]) > 0:
         points = np.array([r["traj_x"][:-1], r["traj_y"][:-1]]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        alpha_vals = np.array(r["alphas"][:len(segments)])
+        phi_vals = np.array(r["phis"][:len(segments)])
         lc = LineCollection(segments, cmap="coolwarm", linewidth=2.5, zorder=5)
-        lc.set_array(alpha_vals)
-        lc.set_clim(0.1, 5.0)
+        lc.set_array(phi_vals)
+        lc.set_clim(0.0, 1.0)
         ax.add_collection(lc)
         cbar = plt.colorbar(lc, ax=ax, shrink=0.6, pad=0.02)
-        cbar.set_label("alpha", fontsize=fontsize_cbar)
+        cbar.set_label("phi", fontsize=fontsize_cbar)
 
     bias_angle = scen.get("bias_angle", np.pi / 2)
     arrow_dx = 4.0 * np.cos(bias_angle)
@@ -188,27 +188,22 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
             bbox=dict(boxstyle='round,pad=0.4', facecolor='lightyellow', alpha=0.9))
 
 
-def plot_alpha_phi_time(ax, scen, r, fontsize_title=11, fontsize_label=9, fontsize_legend=7):
-    """Column 2: Alpha + Phi over time + obstacle zone shading."""
-    ax.plot(r["alphas"], color="blue", linewidth=1.5, label="alpha")
-    ax2 = ax.twinx()
-    ax2.plot(r["phis"], color="red", linewidth=1.5, label="phi", alpha=0.7)
-    ax2.set_ylabel("Phi", color="red", fontsize=fontsize_label)
-    ax2.tick_params(axis='y', labelcolor='red')
+def plot_phi_alpha_line_time(ax, scen, r, fontsize_title=11, fontsize_label=9, fontsize_legend=7):
+    """Column 2: Phi over time + fixed alpha horizontal line + obstacle zone shading."""
+    ax.plot(r["phis"], color="red", linewidth=1.5, label="phi")
+    ax.axhline(FIXED_ALPHA, color="blue", linewidth=1.5, linestyle="--",
+               label=f"alpha={FIXED_ALPHA:.1f} (fixed)", alpha=0.7)
     for oi in range(3):
         close_mask = np.array(r["per_obs_dists"][oi]) < 5.0
         for start_idx in range(len(close_mask)):
             if close_mask[start_idx]:
                 ax.axvspan(start_idx, start_idx + 1, color=OBS_COLORS[oi], alpha=0.1)
-    ax.set_title(f"{scen['name']} -- Alpha+Phi + Obs Zone", fontsize=fontsize_title)
+    ax.set_title(f"{scen['name']} -- Phi + Fixed Alpha + Obs Zone", fontsize=fontsize_title)
     ax.set_xlabel("Time Step", fontsize=fontsize_label)
-    ax.set_ylabel("Alpha", color="blue", fontsize=fontsize_label)
-    ax.tick_params(axis='y', labelcolor='blue')
-    ax.set_ylim(0, 5.5)
+    ax.set_ylabel("Value", fontsize=fontsize_label)
+    ax.set_ylim(0, max(FIXED_ALPHA + 1.0, 2.0))
     ax.grid(True, alpha=0.3)
-    lines1, labels1 = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=fontsize_legend)
+    ax.legend(loc="upper right", fontsize=fontsize_legend)
 
 
 def plot_speed(ax, scen, r, fontsize_title=11, fontsize_label=None):
@@ -225,19 +220,20 @@ def plot_speed(ax, scen, r, fontsize_title=11, fontsize_label=None):
 
 def get_min_dists_at_step(r):
     return [min(r["per_obs_dists"][oi][t] for oi in range(3))
-            for t in range(len(r["alphas"]))]
+            for t in range(len(r["phis"]))]
 
 
-def plot_alpha_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=None,
-                       fontsize_legend=7, show_legend=True):
-    """Column 4: Alpha vs Obstacle Distance."""
+def plot_fixed_alpha_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=None,
+                          fontsize_legend=7, show_legend=True):
+    """Column 4: Fixed alpha line + obstacle distances over time."""
     fontsize_label = fontsize_label or fontsize_title
-    ax.scatter(min_dists, r["alphas"], c=range(len(r["alphas"])),
-               cmap="viridis", s=8, alpha=0.6)
-    ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
-    ax.set_title(f"{scen['name']} -- Alpha vs Obs Dist", fontsize=fontsize_title)
-    ax.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=fontsize_label)
-    ax.set_ylabel("Alpha", fontsize=fontsize_label)
+    ax.plot(min_dists, color="green", linewidth=1.5, label="Min obs dist")
+    ax.axhline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
+    ax.axhline(FIXED_ALPHA, color="blue", linewidth=1.5, linestyle="--",
+               alpha=0.7, label=f"alpha={FIXED_ALPHA:.1f} (fixed)")
+    ax.set_title(f"{scen['name']} -- Fixed Alpha + Obs Dist", fontsize=fontsize_title)
+    ax.set_xlabel("Time Step", fontsize=fontsize_label)
+    ax.set_ylabel("Distance / Alpha", fontsize=fontsize_label)
     ax.grid(True, alpha=0.3)
     if show_legend:
         ax.legend(loc="upper right", fontsize=fontsize_legend)
@@ -245,12 +241,12 @@ def plot_alpha_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label
 
 def plot_phi_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=None,
                      fontsize_legend=7, show_legend=True):
-    """Column 5: Phi vs Obstacle Distance."""
+    """Column 5: Phi vs Obstacle Distance (KEY column for exp 43)."""
     fontsize_label = fontsize_label or fontsize_title
     ax.scatter(min_dists, r["phis"], c=range(len(r["phis"])),
                cmap="magma", s=8, alpha=0.6)
     ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
-    ax.set_title(f"{scen['name']} -- Phi vs Obs Dist", fontsize=fontsize_title)
+    ax.set_title(f"{scen['name']} -- Phi vs Obs Dist (KEY)", fontsize=fontsize_title)
     ax.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=fontsize_label)
     ax.set_ylabel("Phi", fontsize=fontsize_label)
     ax.grid(True, alpha=0.3)
@@ -260,14 +256,15 @@ def plot_phi_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=N
 
 def plot_policy_map(ax, r, scen, min_dists, fontsize_title=11, fontsize_label=None,
                     fontsize_cbar=8):
-    """Column 6: Policy Map (alpha+phi scatter)."""
+    """Column 6: Policy Map -- phi scatter only (alpha is constant)."""
     fontsize_label = fontsize_label or fontsize_title
-    sc = ax.scatter(r["alphas"], r["phis"], c=min_dists,
-                    cmap="RdYlGn", s=10, alpha=0.6)
+    sc = ax.scatter(min_dists, r["phis"], c=range(len(r["phis"])),
+                    cmap="magma", s=10, alpha=0.6)
     cbar = plt.colorbar(sc, ax=ax, shrink=0.6, pad=0.02)
-    cbar.set_label("Min Obs Dist (m)", fontsize=fontsize_cbar)
-    ax.set_title(f"{scen['name']} -- Policy Map", fontsize=fontsize_title)
-    ax.set_xlabel("Alpha", fontsize=fontsize_label)
+    cbar.set_label("Time Step", fontsize=fontsize_cbar)
+    ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7)
+    ax.set_title(f"{scen['name']} -- Phi Policy (alpha={FIXED_ALPHA:.1f} fixed)", fontsize=fontsize_title)
+    ax.set_xlabel("Min Obs Dist (m)", fontsize=fontsize_label)
     ax.set_ylabel("Phi", fontsize=fontsize_label)
     ax.grid(True, alpha=0.3)
 
@@ -278,7 +275,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     print("Loading model...")
-    env = CurriculumEnv()
+    env = FixedAlphaPhiOnlyEnv()
     model = PPO.load(MODEL_PATH)
 
     scenarios = generate_scenarios(n=10, seed=42)
@@ -297,7 +294,7 @@ if __name__ == "__main__":
     n_scen = len(scenarios)
     fig, axs = plt.subplots(n_scen, 6, figsize=(54, 7 * n_scen),
                             gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
-    fig.suptitle("Exp 39: CURRICULUM (bias=0.7, error=-1.0)",
+    fig.suptitle(f"Exp 43: FIXED ALPHA={FIXED_ALPHA:.1f}, PHI ONLY (bias=0.7, error=-1.0)",
                  fontsize=18, y=1.005)
 
     for i, data in enumerate(all_scenarios):
@@ -305,9 +302,9 @@ if __name__ == "__main__":
         min_dists = get_min_dists_at_step(r)
 
         plot_trajectory(axs[i, 0], scen, r)
-        plot_alpha_phi_time(axs[i, 1], scen, r)
+        plot_phi_alpha_line_time(axs[i, 1], scen, r)
         plot_speed(axs[i, 2], scen, r)
-        plot_alpha_vs_dist(axs[i, 3], scen, r, min_dists, show_legend=(i == 0))
+        plot_fixed_alpha_dist(axs[i, 3], scen, r, min_dists, show_legend=(i == 0))
         plot_phi_vs_dist(axs[i, 4], scen, r, min_dists, show_legend=(i == 0))
         plot_policy_map(axs[i, 5], r, scen, min_dists)
 
@@ -333,11 +330,11 @@ if __name__ == "__main__":
         plot_trajectory(axs_s[0], scen, r, fontsize_title=14, fontsize_label=12,
                         fontsize_metrics=9, fontsize_cbar=10, fontsize_bias=10,
                         fontsize_radius=9, fontsize_time=9, markersize=5)
-        plot_alpha_phi_time(axs_s[1], scen, r, fontsize_title=14, fontsize_label=12,
-                            fontsize_legend=10)
+        plot_phi_alpha_line_time(axs_s[1], scen, r, fontsize_title=14, fontsize_label=12,
+                                fontsize_legend=10)
         plot_speed(axs_s[2], scen, r, fontsize_title=14, fontsize_label=12)
-        plot_alpha_vs_dist(axs_s[3], scen, r, min_dists, fontsize_title=14,
-                           fontsize_label=12, fontsize_legend=10)
+        plot_fixed_alpha_dist(axs_s[3], scen, r, min_dists, fontsize_title=14,
+                              fontsize_label=12, fontsize_legend=10)
         plot_phi_vs_dist(axs_s[4], scen, r, min_dists, fontsize_title=14,
                          fontsize_label=12, fontsize_legend=10)
         plot_policy_map(axs_s[5], r, scen, min_dists, fontsize_title=14,
@@ -350,12 +347,12 @@ if __name__ == "__main__":
         print(f"Saved: plots/scenarios/{fname}")
 
     # =====================================================================
-    # AGGREGATE POLICY MAP: Alpha & Phi vs Distance (all scenarios)
+    # AGGREGATE POLICY MAP: Phi vs Distance only (alpha is fixed)
     # =====================================================================
     danger_zone = -EVAL_RADIUS_ERROR  # 1.0m
 
-    fig_agg, (ax_alpha, ax_phi) = plt.subplots(1, 2, figsize=(18, 8))
-    fig_agg.suptitle("Exp 39 (Curriculum): Alpha & Phi vs Distance to Nearest Obstacle (all scenarios)",
+    fig_agg, ax_phi = plt.subplots(1, 1, figsize=(10, 8))
+    fig_agg.suptitle(f"Exp 43 (Fixed Alpha={FIXED_ALPHA:.1f}, Phi Only): Phi vs Distance to Nearest Obstacle (all scenarios)",
                      fontsize=14)
 
     colors = plt.cm.tab10(np.linspace(0, 1, len(all_scenarios)))
@@ -365,22 +362,17 @@ if __name__ == "__main__":
         label = scen["name"]
         c = colors[idx]
         dists = r["dist"]
-        n = min(len(dists), len(r["alphas"]))
-        ax_alpha.scatter(dists[:n], r["alphas"][:n], color=c, s=8, alpha=0.5, label=label)
+        n = min(len(dists), len(r["phis"]))
         ax_phi.scatter(dists[:n], r["phis"][:n], color=c, s=8, alpha=0.5, label=label)
 
-    for ax in (ax_alpha, ax_phi):
-        ax.axvline(0, color="red", linewidth=1.5, label="True surface (collision)")
-        ax.axvline(danger_zone, color="orange", linewidth=1.5, linestyle="--",
+    ax_phi.axvline(0, color="red", linewidth=1.5, label="True surface (collision)")
+    ax_phi.axvline(danger_zone, color="orange", linewidth=1.5, linestyle="--",
                    label=f"Danger zone ({danger_zone:.1f}m)")
-        ax.set_xlabel("Min Distance to Obstacle Surface (m)")
-        ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=7, loc="upper right", ncol=2)
-
-    ax_alpha.set_ylabel("Alpha")
-    ax_alpha.set_title("Alpha vs Distance")
+    ax_phi.set_xlabel("Min Distance to Obstacle Surface (m)")
     ax_phi.set_ylabel("Phi")
     ax_phi.set_title("Phi vs Distance")
+    ax_phi.grid(True, alpha=0.3)
+    ax_phi.legend(fontsize=7, loc="upper right", ncol=2)
 
     fig_agg.tight_layout()
     fig_agg.savefig(os.path.join(save_dir, "aggregate_policy_map.png"),

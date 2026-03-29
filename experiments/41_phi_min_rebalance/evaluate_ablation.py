@@ -1,5 +1,5 @@
 """
-Exp 39: Curriculum -- evaluate with bias + radius noise at hard phase (phase=3).
+Exp 41: Phi Min=0.5, Progress*25 -- evaluate with bias + radius noise.
 Action is [kx, ky, alpha, phi]. QP enforces safety with robustness margin.
 
 Outputs:
@@ -15,10 +15,10 @@ from matplotlib.collections import LineCollection
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import CurriculumEnv
+from env_dynamic import PhiMinRebalanceEnv
 
 # --- CONFIG ---
-MODEL_PATH = "./models_dynamic/dynamic_5000k_model"
+MODEL_PATH = "./models_dynamic/dynamic_10000k_model"
 MAX_STEPS = 600
 TRUE_OBS_RADIUS = 5.0
 EVAL_BIAS_MAGNITUDE = 0.7
@@ -40,7 +40,6 @@ def generate_scenarios(n=10, seed=42):
             obs_list.append(np.array([x, y]))
         target_y = rng.uniform(-3.0, 3.0)
         target_radius = rng.uniform(1.5, 3.0)
-        # Random bias angle per scenario
         bias_angle = rng.uniform(0, 2 * np.pi)
         scenarios.append({
             "name": f"Random_{i+1}",
@@ -65,7 +64,6 @@ def setup_scenario(env, scen, bias_angle=None):
         env.bias = EVAL_BIAS_MAGNITUDE * np.array([np.cos(bias_angle), np.sin(bias_angle)])
     env.true_radius = [TRUE_OBS_RADIUS] * 3
     env.estimated_radius = [max(TRUE_OBS_RADIUS + EVAL_RADIUS_ERROR, 1.0)] * 3
-    env.phase = 3  # evaluate at hard phase
     return env._get_obs()
 
 
@@ -278,7 +276,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     print("Loading model...")
-    env = CurriculumEnv()
+    env = PhiMinRebalanceEnv()
     model = PPO.load(MODEL_PATH)
 
     scenarios = generate_scenarios(n=10, seed=42)
@@ -297,7 +295,7 @@ if __name__ == "__main__":
     n_scen = len(scenarios)
     fig, axs = plt.subplots(n_scen, 6, figsize=(54, 7 * n_scen),
                             gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
-    fig.suptitle("Exp 39: CURRICULUM (bias=0.7, error=-1.0)",
+    fig.suptitle("Exp 41: PHI MIN=0.5, PROGRESS*25 (bias=0.7, error=-1.0)",
                  fontsize=18, y=1.005)
 
     for i, data in enumerate(all_scenarios):
@@ -355,7 +353,7 @@ if __name__ == "__main__":
     danger_zone = -EVAL_RADIUS_ERROR  # 1.0m
 
     fig_agg, (ax_alpha, ax_phi) = plt.subplots(1, 2, figsize=(18, 8))
-    fig_agg.suptitle("Exp 39 (Curriculum): Alpha & Phi vs Distance to Nearest Obstacle (all scenarios)",
+    fig_agg.suptitle("Exp 41 (Phi Min=0.5, Progress*25): Alpha & Phi vs Distance to Nearest Obstacle (all scenarios)",
                      fontsize=14)
 
     colors = plt.cm.tab10(np.linspace(0, 1, len(all_scenarios)))

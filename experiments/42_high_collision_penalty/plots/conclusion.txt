@@ -1,0 +1,3 @@
+TLDR: [TO FILL]
+Exp 42: Collision penalty -500. Bias U(0.3,1.0), error U(-1.0,0.0), random obs radius.
+Does stronger collision signal push the policy to use phi for safety?

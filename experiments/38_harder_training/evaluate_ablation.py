@@ -28,35 +28,31 @@ OBS_COLORS = ["#e74c3c", "#e67e22", "#9b59b6"]
 OBS_LABELS = ["Obs 1", "Obs 2", "Obs 3"]
 TIME_MARKER_INTERVAL = 50
 
-SCENARIOS = [
-    {"name": "Straight Path",
-     "obs": [np.array([30.0, 6.0]), np.array([50.0, -6.0]), np.array([70.0, 6.0])],
-     "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Obstacles on Path",
-     "obs": [np.array([30.0, 0.0]), np.array([55.0, 2.0]), np.array([75.0, -1.0])],
-     "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "All Upper",
-     "obs": [np.array([25.0, 5.0]), np.array([50.0, 7.0]), np.array([75.0, 4.0])],
-     "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "All Lower",
-     "obs": [np.array([25.0, -5.0]), np.array([50.0, -7.0]), np.array([75.0, -4.0])],
-     "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Narrow Gap",
-     "obs": [np.array([50.0, 6.0]), np.array([50.0, -6.0]), np.array([75.0, 0.0])],
-     "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Clustered",
-     "obs": [np.array([40.0, 3.0]), np.array([50.0, -3.0]), np.array([45.0, -7.0])],
-     "target_pos": np.array([100.0, 0.0]), "target_radius": 2.0},
-    {"name": "Spread",
-     "obs": [np.array([20.0, 7.0]), np.array([50.0, -5.0]), np.array([80.0, 3.0])],
-     "target_pos": np.array([100.0, -2.0]), "target_radius": 2.0},
-    {"name": "Off-Center Target",
-     "obs": [np.array([30.0, 2.0]), np.array([55.0, -4.0]), np.array([70.0, 5.0])],
-     "target_pos": np.array([100.0, 5.0]), "target_radius": 2.0},
-]
+def generate_scenarios(n=10, seed=42):
+    rng = np.random.RandomState(seed)
+    scenarios = []
+    x_bands = [(15.0, 35.0), (40.0, 60.0), (65.0, 85.0)]
+    for i in range(n):
+        obs_list = []
+        for x_low, x_high in x_bands:
+            x = rng.uniform(x_low, x_high)
+            y = rng.uniform(-8.0, 8.0)
+            obs_list.append(np.array([x, y]))
+        target_y = rng.uniform(-3.0, 3.0)
+        target_radius = rng.uniform(1.5, 3.0)
+        # Random bias angle per scenario
+        bias_angle = rng.uniform(0, 2 * np.pi)
+        scenarios.append({
+            "name": f"Random_{i+1}",
+            "obs": obs_list,
+            "target_pos": np.array([100.0, target_y]),
+            "target_radius": target_radius,
+            "bias_angle": bias_angle,
+        })
+    return scenarios
 
 
-def setup_scenario(env, scen, bias=None):
+def setup_scenario(env, scen, bias_angle=None):
     env.reset()
     env.robot_pos = np.array([0.0, 0.0])
     for i in range(3):
@@ -65,8 +61,8 @@ def setup_scenario(env, scen, bias=None):
     env.target_radius = scen["target_radius"]
     env.prev_dist2target = np.linalg.norm(env.robot_pos - env.target_pos)
     env.velocity = np.zeros(2)
-    if bias is not None:
-        env.bias = bias.copy()
+    if bias_angle is not None:
+        env.bias = EVAL_BIAS_MAGNITUDE * np.array([np.cos(bias_angle), np.sin(bias_angle)])
     env.true_radius = [TRUE_OBS_RADIUS] * 3
     env.estimated_radius = [max(TRUE_OBS_RADIUS + EVAL_RADIUS_ERROR, 1.0)] * 3
     return env._get_obs()
@@ -78,8 +74,8 @@ def path_length(traj_x, traj_y):
     return np.sum(np.sqrt(dx**2 + dy**2))
 
 
-def run_episode(env, model, scen, bias=None):
-    obs = setup_scenario(env, scen, bias=bias)
+def run_episode(env, model, scen, bias_angle=None):
+    obs = setup_scenario(env, scen, bias_angle=bias_angle)
     traj_x, traj_y, speeds = [], [], []
     alphas, phis = [], []
     dist_list = []
@@ -156,9 +152,12 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
         cbar = plt.colorbar(lc, ax=ax, shrink=0.6, pad=0.02)
         cbar.set_label("alpha", fontsize=fontsize_cbar)
 
-    ax.annotate("", xy=(5, 12), xytext=(5, 8),
+    bias_angle = scen.get("bias_angle", np.pi / 2)
+    arrow_dx = 4.0 * np.cos(bias_angle)
+    arrow_dy = 4.0 * np.sin(bias_angle)
+    ax.annotate("", xy=(5 + arrow_dx, 10 + arrow_dy), xytext=(5, 10),
                 arrowprops=dict(arrowstyle="->", color="purple", lw=2.5))
-    ax.text(5, 13, f"bias={EVAL_BIAS_MAGNITUDE:.1f}", fontsize=fontsize_bias,
+    ax.text(5, 14, f"bias={EVAL_BIAS_MAGNITUDE:.1f}", fontsize=fontsize_bias,
             color="purple", ha="center", fontweight="bold")
 
     ax.text(95, -13, f"r_true={TRUE_OBS_RADIUS:.0f}, r_est={est_radius:.0f}\ngap={EVAL_RADIUS_ERROR:.1f}m",
@@ -281,19 +280,20 @@ if __name__ == "__main__":
     env = HarderTrainingEnv()
     model = PPO.load(MODEL_PATH)
 
-    hand_picked_bias = EVAL_BIAS_MAGNITUDE * np.array([np.cos(np.pi / 2), np.sin(np.pi / 2)])
+    scenarios = generate_scenarios(n=10, seed=42)
 
-    # --- Hand-picked scenarios ---
-    print(f"\nRunning {len(SCENARIOS)} hand-picked scenarios...")
+    # --- Random scenarios ---
+    print(f"\nRunning {len(scenarios)} random scenarios...")
     all_scenarios = []
-    for scen in SCENARIOS:
-        result = run_episode(env, model, scen, bias=hand_picked_bias)
+    for scen in scenarios:
+        bias_angle = scen["bias_angle"]
+        result = run_episode(env, model, scen, bias_angle=bias_angle)
         all_scenarios.append({"scen": scen, "result": result})
 
     # =====================================================================
     # COMBINED PLOT: 6 columns
     # =====================================================================
-    n_scen = len(SCENARIOS)
+    n_scen = len(scenarios)
     fig, axs = plt.subplots(n_scen, 6, figsize=(54, 7 * n_scen),
                             gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
     fig.suptitle("Exp 38: HARDER TRAINING (bias=0.7, error=-1.0)",
@@ -391,7 +391,7 @@ if __name__ == "__main__":
     # Console summary
     # =====================================================================
     print(f"\n{'='*80}")
-    print(f"HAND-PICKED SCENARIOS (bias={EVAL_BIAS_MAGNITUDE} upward, radius_error={EVAL_RADIUS_ERROR})")
+    print(f"RANDOM SCENARIOS (bias={EVAL_BIAS_MAGNITUDE}, radius_error={EVAL_RADIUS_ERROR})")
     print(f"{'='*80}")
     print(f"{'Scenario':<25} {'Reached':>8} {'Collided':>9} {'MinDist':>9} "
           f"{'Steps':>7} {'AvgSpd':>8} {'PathEff':>9}")
