@@ -1,7 +1,7 @@
 """
-Exp 43: Fixed Alpha + Phi Only -- fully randomized eval.
-Each scenario samples its own bias magnitude, obstacle radii, and radius errors.
-Action is [kx, ky, phi]. Alpha is FIXED at 1.0.
+Exp 44: Systematic sensor error -- fully randomized eval.
+Each scenario samples a systematic bias + per-obstacle jitter.
+Action is [kx, ky, alpha, phi].
 
 Outputs:
   plots_randomized/combined_scenarios.png
@@ -16,15 +16,15 @@ from matplotlib.collections import LineCollection
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import FixedAlphaPhiOnlyEnv
+from env_dynamic import SystematicSensorEnv
 
 # --- CONFIG ---
 MODEL_PATH = "./models_dynamic/dynamic_10000k_model"
 MAX_STEPS = 600
-FIXED_ALPHA = 1.0
 
 BIAS_MAG_RANGE = (0.3, 1.0)
-RADIUS_ERROR_RANGE = (-1.0, 0.0)
+SYSTEMATIC_BIAS_RANGE = (-0.6, 0.4)
+JITTER_RANGE = (-0.2, 0.2)
 OBS_RADIUS_RANGE = (3.0, 7.0)
 
 OBS_COLORS = ["#e74c3c", "#e67e22", "#9b59b6"]
@@ -39,12 +39,14 @@ def generate_scenarios(n=10, seed=42):
         obs_list = []
         obs_radii = []
         obs_errors = []
+        sensor_bias = rng.uniform(*SYSTEMATIC_BIAS_RANGE)
         for x_low, x_high in x_bands:
             x = rng.uniform(x_low, x_high)
             y = rng.uniform(-8.0, 8.0)
             obs_list.append(np.array([x, y]))
             obs_radii.append(rng.uniform(*OBS_RADIUS_RANGE))
-            obs_errors.append(rng.uniform(*RADIUS_ERROR_RANGE))
+            jitter = rng.uniform(*JITTER_RANGE)
+            obs_errors.append(sensor_bias + jitter)
         target_y = rng.uniform(-3.0, 3.0)
         target_radius = rng.uniform(1.5, 3.0)
         bias_angle = rng.uniform(0, 2 * np.pi)
@@ -54,6 +56,7 @@ def generate_scenarios(n=10, seed=42):
             "obs": obs_list,
             "obs_radii": obs_radii,
             "obs_errors": obs_errors,
+            "sensor_bias": sensor_bias,
             "target_pos": np.array([100.0, target_y]),
             "target_radius": target_radius,
             "bias_angle": bias_angle,
@@ -73,6 +76,7 @@ def setup_scenario(env, scen):
     env.target_radius = scen["target_radius"]
     env.prev_dist2target = np.linalg.norm(env.robot_pos - env.target_pos)
     env.velocity = np.zeros(2)
+    env.sensor_bias = scen["sensor_bias"]
     env.bias = scen["bias_mag"] * np.array([np.cos(scen["bias_angle"]),
                                              np.sin(scen["bias_angle"])])
     return env._get_obs()
@@ -87,7 +91,7 @@ def path_length(traj_x, traj_y):
 def run_episode(env, model, scen):
     obs = setup_scenario(env, scen)
     traj_x, traj_y, speeds = [], [], []
-    phis = []
+    alphas, phis = [], []
     dist_list = []
     per_obs_dists = [[], [], []]
     total_reward = 0.0
@@ -102,8 +106,8 @@ def run_episode(env, model, scen):
             per_obs_dists[oi].append(dists[oi])
 
         action, _ = model.predict(obs, deterministic=True)
-        # Action is [kx, ky, phi] — alpha is fixed
-        phis.append(float(action[2]))
+        alphas.append(float(action[2]))
+        phis.append(float(action[3]))
         obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward
         speeds.append(np.linalg.norm(np.array([float(action[0]), float(action[1])])))
@@ -124,7 +128,7 @@ def run_episode(env, model, scen):
 
     return {
         "traj_x": traj_x, "traj_y": traj_y, "speeds": speeds,
-        "phis": phis,
+        "alphas": alphas, "phis": phis,
         "dist": dist_list, "per_obs_dists": per_obs_dists,
         "total_reward": total_reward, "steps": step + 1,
         "reached_target": reached, "collided": collided,
@@ -154,17 +158,16 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
     ax.add_patch(plt.Circle(scen["target_pos"], scen["target_radius"],
                             color="green", alpha=0.3))
 
-    # Color trajectory by phi (since alpha is fixed)
-    if len(r["traj_x"]) > 1 and len(r["phis"]) > 0:
+    if len(r["traj_x"]) > 1 and len(r["alphas"]) > 0:
         points = np.array([r["traj_x"][:-1], r["traj_y"][:-1]]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        phi_vals = np.array(r["phis"][:len(segments)])
-        lc = LineCollection(segments, cmap="magma", linewidth=2.5, zorder=5)
-        lc.set_array(phi_vals)
-        lc.set_clim(0.01, 10.0)
+        alpha_vals = np.array(r["alphas"][:len(segments)])
+        lc = LineCollection(segments, cmap="coolwarm", linewidth=2.5, zorder=5)
+        lc.set_array(alpha_vals)
+        lc.set_clim(0.1, 5.0)
         ax.add_collection(lc)
         cbar = plt.colorbar(lc, ax=ax, shrink=0.6, pad=0.02)
-        cbar.set_label("phi", fontsize=fontsize_cbar)
+        cbar.set_label("alpha", fontsize=fontsize_cbar)
 
     bias_mag = scen["bias_mag"]
     bias_angle = scen["bias_angle"]
@@ -175,7 +178,7 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
     ax.text(5, 14, f"bias={bias_mag:.2f}", fontsize=fontsize_bias,
             color="purple", ha="center", fontweight="bold")
 
-    ax.text(95, -13, f"alpha={FIXED_ALPHA:.1f} (fixed)\nest=true+err",
+    ax.text(95, -13, f"sys_bias={scen['sensor_bias']:.2f}m",
             fontsize=fontsize_radius, color="blue", ha="center",
             bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', alpha=0.9))
 
@@ -202,21 +205,26 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
             bbox=dict(boxstyle='round,pad=0.4', facecolor='lightyellow', alpha=0.9))
 
 
-def plot_phi_time(ax, scen, r, fontsize_title=11, fontsize_label=9, fontsize_legend=7):
-    """Column 2: Phi over time + obstacle zone shading (no alpha — it's fixed)."""
-    ax.plot(r["phis"], color="red", linewidth=1.5, label="phi")
-    ax.axhline(FIXED_ALPHA, color="blue", linewidth=1, linestyle="--", alpha=0.5,
-               label=f"alpha={FIXED_ALPHA} (fixed)")
+def plot_alpha_phi_time(ax, scen, r, fontsize_title=11, fontsize_label=9, fontsize_legend=7):
+    ax.plot(r["alphas"], color="blue", linewidth=1.5, label="alpha")
+    ax2 = ax.twinx()
+    ax2.plot(r["phis"], color="red", linewidth=1.5, label="phi", alpha=0.7)
+    ax2.set_ylabel("Phi", color="red", fontsize=fontsize_label)
+    ax2.tick_params(axis='y', labelcolor='red')
     for oi in range(3):
         close_mask = np.array(r["per_obs_dists"][oi]) < 5.0
         for start_idx in range(len(close_mask)):
             if close_mask[start_idx]:
                 ax.axvspan(start_idx, start_idx + 1, color=OBS_COLORS[oi], alpha=0.1)
-    ax.set_title(f"{scen['name']} -- Phi + Obs Zone", fontsize=fontsize_title)
+    ax.set_title(f"{scen['name']} -- Alpha+Phi + Obs Zone", fontsize=fontsize_title)
     ax.set_xlabel("Time Step", fontsize=fontsize_label)
-    ax.set_ylabel("Phi", fontsize=fontsize_label)
+    ax.set_ylabel("Alpha", color="blue", fontsize=fontsize_label)
+    ax.tick_params(axis='y', labelcolor='blue')
+    ax.set_ylim(0, 5.5)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper right", fontsize=fontsize_legend)
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=fontsize_legend)
 
 
 def plot_speed(ax, scen, r, fontsize_title=11, fontsize_label=None):
@@ -232,7 +240,21 @@ def plot_speed(ax, scen, r, fontsize_title=11, fontsize_label=None):
 
 def get_min_dists_at_step(r):
     return [min(r["per_obs_dists"][oi][t] for oi in range(3))
-            for t in range(len(r["phis"]))]
+            for t in range(len(r["alphas"]))]
+
+
+def plot_alpha_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=None,
+                       fontsize_legend=7, show_legend=True):
+    fontsize_label = fontsize_label or fontsize_title
+    ax.scatter(min_dists, r["alphas"], c=range(len(r["alphas"])),
+               cmap="viridis", s=8, alpha=0.6)
+    ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
+    ax.set_title(f"{scen['name']} -- Alpha vs Obs Dist", fontsize=fontsize_title)
+    ax.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=fontsize_label)
+    ax.set_ylabel("Alpha", fontsize=fontsize_label)
+    ax.grid(True, alpha=0.3)
+    if show_legend:
+        ax.legend(loc="upper right", fontsize=fontsize_legend)
 
 
 def plot_phi_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=None,
@@ -249,31 +271,15 @@ def plot_phi_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=N
         ax.legend(loc="upper right", fontsize=fontsize_legend)
 
 
-def plot_speed_vs_dist(ax, scen, r, min_dists, fontsize_title=11, fontsize_label=None,
-                       fontsize_legend=7, show_legend=True):
-    """Since alpha is fixed, show speed vs distance instead."""
-    fontsize_label = fontsize_label or fontsize_title
-    ax.scatter(min_dists, r["speeds"], c=range(len(r["speeds"])),
-               cmap="viridis", s=8, alpha=0.6)
-    ax.axvline(0, color="red", linewidth=1.5, linestyle=":", alpha=0.7, label="Collision")
-    ax.set_title(f"{scen['name']} -- Speed vs Obs Dist", fontsize=fontsize_title)
-    ax.set_xlabel("Min Distance to Obstacle Surface (m)", fontsize=fontsize_label)
-    ax.set_ylabel("Speed (m/s)", fontsize=fontsize_label)
-    ax.grid(True, alpha=0.3)
-    if show_legend:
-        ax.legend(loc="upper right", fontsize=fontsize_legend)
-
-
 def plot_policy_map(ax, r, scen, min_dists, fontsize_title=11, fontsize_label=None,
                     fontsize_cbar=8):
-    """Policy map: speed vs phi colored by distance."""
     fontsize_label = fontsize_label or fontsize_title
-    sc = ax.scatter(r["speeds"], r["phis"], c=min_dists,
+    sc = ax.scatter(r["alphas"], r["phis"], c=min_dists,
                     cmap="RdYlGn", s=10, alpha=0.6)
     cbar = plt.colorbar(sc, ax=ax, shrink=0.6, pad=0.02)
     cbar.set_label("Min Obs Dist (m)", fontsize=fontsize_cbar)
     ax.set_title(f"{scen['name']} -- Policy Map", fontsize=fontsize_title)
-    ax.set_xlabel("Speed", fontsize=fontsize_label)
+    ax.set_xlabel("Alpha", fontsize=fontsize_label)
     ax.set_ylabel("Phi", fontsize=fontsize_label)
     ax.grid(True, alpha=0.3)
 
@@ -284,7 +290,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     print("Loading model...")
-    env = FixedAlphaPhiOnlyEnv()
+    env = SystematicSensorEnv()
     model = PPO.load(MODEL_PATH)
 
     scenarios = generate_scenarios(n=10, seed=42)
@@ -295,20 +301,19 @@ if __name__ == "__main__":
         result = run_episode(env, model, scen)
         all_scenarios.append({"scen": scen, "result": result})
 
-    # --- COMBINED PLOT: 6 columns ---
+    # --- COMBINED PLOT ---
     n_scen = len(scenarios)
     fig, axs = plt.subplots(n_scen, 6, figsize=(54, 7 * n_scen),
                             gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
-    fig.suptitle(f"Exp 43: FIXED ALPHA={FIXED_ALPHA} + PHI ONLY (fully randomized eval)",
-                 fontsize=18, y=1.005)
+    fig.suptitle("Exp 44: SYSTEMATIC SENSOR ERROR (fully randomized eval)", fontsize=18, y=1.005)
 
     for i, data in enumerate(all_scenarios):
         scen, r = data["scen"], data["result"]
         min_dists = get_min_dists_at_step(r)
         plot_trajectory(axs[i, 0], scen, r)
-        plot_phi_time(axs[i, 1], scen, r)
+        plot_alpha_phi_time(axs[i, 1], scen, r)
         plot_speed(axs[i, 2], scen, r)
-        plot_speed_vs_dist(axs[i, 3], scen, r, min_dists, show_legend=(i == 0))
+        plot_alpha_vs_dist(axs[i, 3], scen, r, min_dists, show_legend=(i == 0))
         plot_phi_vs_dist(axs[i, 4], scen, r, min_dists, show_legend=(i == 0))
         plot_policy_map(axs[i, 5], r, scen, min_dists)
 
@@ -331,10 +336,10 @@ if __name__ == "__main__":
         plot_trajectory(axs_s[0], scen, r, fontsize_title=14, fontsize_label=12,
                         fontsize_metrics=9, fontsize_cbar=10, fontsize_bias=10,
                         fontsize_radius=9, fontsize_time=9, markersize=5)
-        plot_phi_time(axs_s[1], scen, r, fontsize_title=14, fontsize_label=12,
-                      fontsize_legend=10)
+        plot_alpha_phi_time(axs_s[1], scen, r, fontsize_title=14, fontsize_label=12,
+                            fontsize_legend=10)
         plot_speed(axs_s[2], scen, r, fontsize_title=14, fontsize_label=12)
-        plot_speed_vs_dist(axs_s[3], scen, r, min_dists, fontsize_title=14,
+        plot_alpha_vs_dist(axs_s[3], scen, r, min_dists, fontsize_title=14,
                            fontsize_label=12, fontsize_legend=10)
         plot_phi_vs_dist(axs_s[4], scen, r, min_dists, fontsize_title=14,
                          fontsize_label=12, fontsize_legend=10)
@@ -348,8 +353,8 @@ if __name__ == "__main__":
         print(f"Saved: plots_randomized/scenarios/{fname}")
 
     # --- AGGREGATE POLICY MAP ---
-    fig_agg, (ax_spd, ax_phi) = plt.subplots(1, 2, figsize=(18, 8))
-    fig_agg.suptitle(f"Exp 43 (Fixed Alpha={FIXED_ALPHA}): Speed & Phi vs Distance (fully randomized eval)",
+    fig_agg, (ax_alpha, ax_phi) = plt.subplots(1, 2, figsize=(18, 8))
+    fig_agg.suptitle("Exp 44 (Systematic Sensor Error): Alpha & Phi vs Distance (fully randomized eval)",
                      fontsize=14)
 
     colors = plt.cm.tab10(np.linspace(0, 1, len(all_scenarios)))
@@ -358,18 +363,18 @@ if __name__ == "__main__":
         label = scen["name"]
         c = colors[idx]
         dists = r["dist"]
-        n = min(len(dists), len(r["phis"]))
-        ax_spd.scatter(dists[:n], r["speeds"][:n], color=c, s=8, alpha=0.5, label=label)
+        n = min(len(dists), len(r["alphas"]))
+        ax_alpha.scatter(dists[:n], r["alphas"][:n], color=c, s=8, alpha=0.5, label=label)
         ax_phi.scatter(dists[:n], r["phis"][:n], color=c, s=8, alpha=0.5, label=label)
 
-    for ax in (ax_spd, ax_phi):
+    for ax in (ax_alpha, ax_phi):
         ax.axvline(0, color="red", linewidth=1.5, label="True surface (collision)")
         ax.set_xlabel("Min Distance to Obstacle Surface (m)")
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=7, loc="upper right", ncol=2)
 
-    ax_spd.set_ylabel("Speed (m/s)")
-    ax_spd.set_title("Speed vs Distance")
+    ax_alpha.set_ylabel("Alpha")
+    ax_alpha.set_title("Alpha vs Distance")
     ax_phi.set_ylabel("Phi")
     ax_phi.set_title("Phi vs Distance")
 
@@ -380,12 +385,12 @@ if __name__ == "__main__":
     print("Saved: plots_randomized/aggregate_policy_map.png")
 
     # --- Console summary ---
-    print(f"\n{'='*90}")
-    print(f"FULLY RANDOMIZED SCENARIOS (alpha={FIXED_ALPHA} fixed)")
-    print(f"{'='*90}")
+    print(f"\n{'='*100}")
+    print(f"FULLY RANDOMIZED SCENARIOS (systematic sensor error)")
+    print(f"{'='*100}")
     print(f"{'Scenario':<12} {'Reached':>8} {'Collided':>9} {'MinDist':>9} "
-          f"{'Steps':>7} {'AvgSpd':>8} {'PathEff':>9} {'BiasMag':>9} {'Errors':>20}")
-    print(f"{'-'*100}")
+          f"{'Steps':>7} {'AvgSpd':>8} {'PathEff':>9} {'BiasMag':>9} {'SysBias':>8} {'Errors':>20}")
+    print(f"{'-'*110}")
 
     for data in all_scenarios:
         scen, r = data["scen"], data["result"]
@@ -395,6 +400,6 @@ if __name__ == "__main__":
               f"{'YES' if r['collided'] else 'No':>9} "
               f"{r['min_clearance']:>9.3f} {r['steps']:>7} "
               f"{np.mean(r['speeds']):>8.2f} {r['path_efficiency']:>9.2f} "
-              f"{scen['bias_mag']:>9.2f} [{errs}]")
+              f"{scen['bias_mag']:>9.2f} {scen['sensor_bias']:>8.2f} [{errs}]")
 
     print(f"\nDone! Plots saved to {save_dir}")

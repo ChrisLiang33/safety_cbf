@@ -1,9 +1,16 @@
 """
-Exp 40: ISSf-CBF, moderate difficulty, 10M training steps.
+Exp 44: ISSf-CBF with realistic sensor error model.
 Agent controls [kx, ky, alpha, phi].
 
-Moderate conditions: bias U(0.3, 1.0), radius error U(-1.0, 0.0).
-Random obstacle radius U(3.0, 7.0). Both sampled once per episode.
+Sensor error = systematic_bias + per-measurement jitter.
+  - systematic_bias: sampled ONCE per episode from U(-0.6, 0.4)
+    (sensor calibration error, same for all obstacles)
+  - jitter: sampled per obstacle from U(-0.2, 0.2)
+    (per-measurement noise on top of systematic bias)
+  - Total error per obstacle = systematic_bias + jitter, range approx U(-0.8, 0.6)
+
+Dynamics bias U(0.3, 1.0), random obstacle radius U(3.0, 7.0).
+All sampled once per episode.
 """
 import gymnasium as gym
 from gymnasium import spaces
@@ -11,17 +18,19 @@ import numpy as np
 import cvxpy as cp
 
 
-class Moderate10MEnv(gym.Env):
-    def __init__(self, radius_error_range=(-1.0, 0.0), bias_magnitude_range=(0.3, 1.0),
-                 obs_radius_range=(3.0, 7.0)):
+class SystematicSensorEnv(gym.Env):
+    def __init__(self, systematic_bias_range=(-0.6, 0.4), jitter_range=(-0.2, 0.2),
+                 bias_magnitude_range=(0.3, 1.0), obs_radius_range=(3.0, 7.0)):
         super().__init__()
         self.dt = 0.1
-        self.radius_error_range = radius_error_range
+        self.systematic_bias_range = systematic_bias_range
+        self.jitter_range = jitter_range
         self.bias_magnitude_range = bias_magnitude_range
         self.obs_radius_range = obs_radius_range
         self.true_radius = [5.0, 5.0, 5.0]
         self.estimated_radius = [5.0, 5.0, 5.0]
         self.bias = np.zeros(2)
+        self.sensor_bias = 0.0  # systematic sensor bias for this episode
 
         self.action_space = spaces.Box(
             low=np.array([-3.0, -3.0, 0.1, 0.01], dtype=np.float32),
@@ -76,16 +85,22 @@ class Moderate10MEnv(gym.Env):
         for i in range(3):
             self.true_radius[i] = self.np_random.uniform(
                 self.obs_radius_range[0], self.obs_radius_range[1])
+
+        # Systematic sensor bias: one per episode (sensor calibration)
+        self.sensor_bias = self.np_random.uniform(
+            self.systematic_bias_range[0], self.systematic_bias_range[1])
+        # Per-obstacle jitter on top
         for i in range(3):
-            error = self.np_random.uniform(
-                self.radius_error_range[0], self.radius_error_range[1])
-            self.estimated_radius[i] = max(self.true_radius[i] + error, 1.0) 
+            jitter = self.np_random.uniform(
+                self.jitter_range[0], self.jitter_range[1])
+            error = self.sensor_bias + jitter
+            self.estimated_radius[i] = max(self.true_radius[i] + error, 1.0)
 
         bias_mag = self.np_random.uniform(
             self.bias_magnitude_range[0], self.bias_magnitude_range[1])
         angle = self.np_random.uniform(0, 2 * np.pi)
         self.bias = bias_mag * np.array([np.cos(angle), np.sin(angle)])
-        
+
         self.prev_dist2target = np.linalg.norm(self.robot_pos - self.target_pos)
         return self._get_obs(), {}
 
@@ -142,6 +157,7 @@ class Moderate10MEnv(gym.Env):
             "alpha": float(alpha), "phi": float(phi),
             "true_radius": list(self.true_radius),
             "estimated_radius": list(self.estimated_radius),
+            "sensor_bias": float(self.sensor_bias),
             "bias": self.bias.copy(),
         }
 

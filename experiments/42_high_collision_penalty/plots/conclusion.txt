@@ -1,3 +1,42 @@
-TLDR: [TO FILL]
-Exp 42: Collision penalty -500. Bias U(0.3,1.0), error U(-1.0,0.0), random obs radius.
-Does stronger collision signal push the policy to use phi for safety?
+Experiment 42: High Collision Penalty
+=======================================
+
+Motivation:
+-----------
+Phi was stuck at 0.01 in exp 40. Does a stronger collision penalty (-500
+instead of -100) push the policy to use phi as a safety tool?
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi], phi range [0.01, 10.0]
+- Collision penalty: -500 (was -100)
+- Everything else same as exp 40: bias U(0.3,1.0), error U(-1.0,0.0),
+  obstacle radius U(3.0,7.0), progress*50, 10M steps, 16 envs
+
+What we hoped to find:
+----------------------
+Stronger collision penalty creates more pressure to use phi for safety,
+resulting in phi increasing near obstacles.
+
+Results:
+--------
+- ~7-8/10 reached — comparable to exp 40
+- Alpha: similar range and behavior to exp 40
+- Phi: much more activity than exp 40! Phi ranges from 0.01 up to ~1.0
+  in the aggregate policy map, with visible spread at closer distances.
+  Not a clean proximity-adaptive trend — more noisy/scattered — but
+  clearly the policy is using phi more than in exp 40 where it was flat.
+- Speed: similar to exp 40
+
+Conclusion:
+-----------
+Higher collision penalty did create more phi activity — the policy is no
+longer ignoring phi entirely. However, the behavior is not a clean
+"phi increases as distance decreases" pattern. It's more of a general
+"be cautious sometimes" response. Still, this is the most phi movement
+we've seen outside of exp 38 (extreme conditions).
+
+Takeaway: higher collision penalty is a useful component to carry forward
+into future experiments. The penalty of -500 may be too aggressive;
+a moderate range like -200 to -300 combined with other improvements
+(systematic sensor error, higher speed) could produce cleaner results.

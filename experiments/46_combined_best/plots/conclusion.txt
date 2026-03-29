@@ -1,0 +1,51 @@
+Experiment 46: Combined Best
+=============================
+NOT YET RUN
+
+Based on: Exp 45 (higher speed + systematic sensor error) + Exp 42 (collision penalty)
+
+Motivation:
+-----------
+Combining the best components from previous experiments:
+  - Exp 42 showed that higher collision penalty creates more phi activity
+    (phi moved from flat 0.01 up to ~1.0, though noisy)
+  - Exp 44/45 introduced systematic sensor error (coherent signal) and
+    higher speed (to make alpha behavior visible in speed plots)
+  - This experiment combines all three: higher speed gives alpha room to
+    show contrast, systematic sensor error gives phi a coherent learning
+    signal, and moderate collision penalty creates pressure to use phi.
+
+Components:
+-----------
+From Exp 44: Systematic sensor bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+From Exp 45: Max speed 6 m/s, target at x=150, 800 max steps
+From Exp 42: Collision penalty -250 (moderate between -100 and -500)
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi]
+- Max speed: 6 m/s (action space [-6, 6])
+- Environment: target at x=150, obstacle bands [20-50, 60-100, 110-140]
+- Collision penalty: -250
+- Progress reward: progress * 50.0 - 1.0
+- Dynamics bias: U(0.3, 1.0)
+- Obstacle radius: U(3.0, 7.0)
+- 10M steps, 16 envs
+
+What we hope to find:
+---------------------
+1. Alpha: clear speed contrast — fast in open areas, slow near obstacles
+2. Phi: adaptive proximity behavior driven by both the coherent sensor
+   error signal AND the higher collision penalty pressure
+3. Better phi learning than any individual experiment alone
+
+Potential concerns / fixes:
+---------------------------
+- If collision penalty -250 is still too aggressive, try -200
+- If navigation suffers (low success rate), the combined difficulty of
+  higher speed + uncertainty + penalty may be too much — consider
+  training for 15-20M steps instead
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

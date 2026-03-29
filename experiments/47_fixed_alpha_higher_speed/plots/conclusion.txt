@@ -1,0 +1,42 @@
+Experiment 47: Fixed Alpha + Higher Speed + Two-Level Sensor Error
+===================================================================
+NOT YET RUN
+
+Based on: Exp 43 (fixed alpha) + Exp 45 (higher speed + sensor error)
+
+Motivation:
+-----------
+Exp 43 showed the strongest phi proximity-adaptive behavior of all experiments
+by fixing alpha=1.0, forcing phi to be the only safety knob. However, it used
+the old setup (3 m/s, small env, independent per-obstacle errors).
+
+This experiment applies the fixed-alpha approach to the improved training
+conditions: higher speed (6 m/s), larger environment, and the two-level
+sensor error model (systematic bias + per-obstacle jitter).
+
+Setup:
+------
+- Action: [kx, ky, phi] — alpha FIXED at 1.0
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0)
+- Obstacle radius: U(3.0, 7.0)
+- Collision penalty: -100 (standard)
+- 10M steps, 16 envs
+
+What we hope to find:
+---------------------
+1. Phi showing clear proximity-adaptive behavior (like exp 43 but stronger)
+2. Higher speed creating more visible speed contrast when phi tightens CBF
+3. Coherent sensor error giving phi a cleaner learning signal than exp 43
+
+Comparisons:
+------------
+- vs Exp 43: same fixed alpha, but better training conditions — expect
+  stronger phi signal
+- vs Exp 45: same conditions, but alpha fixed — expect more phi activity
+  at cost of navigation success
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

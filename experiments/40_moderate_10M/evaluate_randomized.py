@@ -38,21 +38,22 @@ def generate_scenarios(n=10, seed=42):
     for i in range(n):
         obs_list = []
         obs_radii = []
+        obs_errors = []
         for x_low, x_high in x_bands:
             x = rng.uniform(x_low, x_high)
             y = rng.uniform(-8.0, 8.0)
             obs_list.append(np.array([x, y]))
             obs_radii.append(rng.uniform(*OBS_RADIUS_RANGE))
+            obs_errors.append(rng.uniform(*RADIUS_ERROR_RANGE))
         target_y = rng.uniform(-3.0, 3.0)
         target_radius = rng.uniform(1.5, 3.0)
         bias_angle = rng.uniform(0, 2 * np.pi)
         bias_mag = rng.uniform(*BIAS_MAG_RANGE)
-        radius_error = rng.uniform(*RADIUS_ERROR_RANGE)  # one error per scenario
         scenarios.append({
             "name": f"Random_{i+1}",
             "obs": obs_list,
             "obs_radii": obs_radii,
-            "radius_error": radius_error,
+            "obs_errors": obs_errors,
             "target_pos": np.array([100.0, target_y]),
             "target_radius": target_radius,
             "bias_angle": bias_angle,
@@ -67,7 +68,7 @@ def setup_scenario(env, scen):
     for i in range(3):
         env.obs_pos[i] = scen["obs"][i].copy()
         env.true_radius[i] = scen["obs_radii"][i]
-        env.estimated_radius[i] = max(scen["obs_radii"][i] + scen["radius_error"], 1.0)
+        env.estimated_radius[i] = max(scen["obs_radii"][i] + scen["obs_errors"][i], 1.0)
     env.target_pos = scen["target_pos"].copy()
     env.target_radius = scen["target_radius"]
     env.prev_dist2target = np.linalg.norm(env.robot_pos - env.target_pos)
@@ -139,7 +140,7 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
 
     for j in range(3):
         tr = scen["obs_radii"][j]
-        er = scen["radius_error"]
+        er = scen["obs_errors"][j]
         est_r = max(tr + er, 1.0)
         ax.add_patch(plt.Circle(scen["obs"][j], tr,
                                 color="red", alpha=0.2, linestyle="-"))
@@ -147,7 +148,7 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
                                 color="blue", alpha=0.1, linestyle="--", linewidth=1.5,
                                 fill=False))
         ax.text(scen["obs"][j][0], scen["obs"][j][1] - tr - 1.5,
-                f"r={tr:.1f}", fontsize=fontsize_radius, color="red",
+                f"r={tr:.1f}, err={er:.2f}", fontsize=fontsize_radius, color="red",
                 ha="center", fontweight="bold")
 
     ax.add_patch(plt.Circle(scen["target_pos"], scen["target_radius"],
@@ -173,7 +174,7 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
     ax.text(5, 14, f"bias={bias_mag:.2f}", fontsize=fontsize_bias,
             color="purple", ha="center", fontweight="bold")
 
-    ax.text(95, -13, f"sensor_err={scen['radius_error']:.2f}m",
+    ax.text(95, -13, f"est=true+err",
             fontsize=fontsize_radius, color="blue", ha="center",
             bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', alpha=0.9))
 
@@ -384,16 +385,17 @@ if __name__ == "__main__":
     print(f"FULLY RANDOMIZED SCENARIOS")
     print(f"{'='*90}")
     print(f"{'Scenario':<12} {'Reached':>8} {'Collided':>9} {'MinDist':>9} "
-          f"{'Steps':>7} {'AvgSpd':>8} {'PathEff':>9} {'BiasMag':>9} {'SnsErr':>8}")
-    print(f"{'-'*90}")
+          f"{'Steps':>7} {'AvgSpd':>8} {'PathEff':>9} {'BiasMag':>9} {'Errors':>20}")
+    print(f"{'-'*100}")
 
     for data in all_scenarios:
         scen, r = data["scen"], data["result"]
+        errs = ", ".join(f"{e:.2f}" for e in scen["obs_errors"])
         print(f"{scen['name']:<12} "
               f"{'Yes' if r['reached_target'] else 'No':>8} "
               f"{'YES' if r['collided'] else 'No':>9} "
               f"{r['min_clearance']:>9.3f} {r['steps']:>7} "
               f"{np.mean(r['speeds']):>8.2f} {r['path_efficiency']:>9.2f} "
-              f"{scen['bias_mag']:>9.2f} {scen['radius_error']:>8.2f}")
+              f"{scen['bias_mag']:>9.2f} [{errs}]")
 
     print(f"\nDone! Plots saved to {save_dir}")

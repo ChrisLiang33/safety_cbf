@@ -1,0 +1,45 @@
+Experiment 50: Fixed Alpha=2.0 + Combined Best
+=================================================
+NOT YET RUN
+
+Based on: Exp 48 (fixed alpha + combined best) with alpha=2.0 instead of 1.0
+
+Motivation:
+-----------
+Exp 48 uses alpha=1.0 fixed. Alpha=2.0 is more aggressive — it makes the
+CBF constraint looser (-alpha*h is larger when alpha is bigger, allowing
+more control authority near obstacles).
+
+With a looser baseline constraint, the robot can approach obstacles faster.
+This makes phi MORE critical — without phi adding a robustness margin, the
+robot risks getting dangerously close. Phi has both more room and more
+reason to act. This may produce the strongest phi learning signal.
+
+However, alpha=2.0 also means more collisions during training, which could
+help or hurt learning depending on whether the policy can extract the right
+lesson from those failures.
+
+Setup:
+------
+- Action: [kx, ky, phi] — alpha FIXED at 2.0
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0)
+- Obstacle radius: U(3.0, 7.0)
+- Collision penalty: -250
+- 10M steps, 16 envs
+
+Comparisons:
+------------
+- vs Exp 48 (alpha=1.0): does higher alpha push phi to learn more?
+- vs Exp 49 (alpha=0.5): three-way comparison of alpha's effect on phi
+
+Potential concerns:
+-------------------
+- Alpha=2.0 may cause too many collisions during training, degrading
+  navigation quality. If success rate is very low (<3/10), the alpha
+  may be too aggressive for this speed.
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

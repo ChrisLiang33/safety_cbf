@@ -1,0 +1,58 @@
+Experiment 45: Higher Speed + Systematic Sensor Error
+======================================================
+NOT YET RUN
+
+Based on: Experiment 44 (systematic sensor error model)
+
+Motivation:
+-----------
+In exp 40, alpha showed some proximity-adaptive behavior (dropping near obstacles),
+but the effect was hard to see because the max speed of 3 m/s was too low. The CBF
+constraint with alpha=2 vs alpha=0.5 both allow speeds near 3 m/s — no visible
+speed contrast. By raising the speed ceiling, we expect to see a clear difference:
+  - Open area: robot goes fast (5-6 m/s), alpha high
+  - Near obstacle: alpha drops, CBF actively constrains speed down to 2-3 m/s
+  - Speed plot shows visible dip near obstacles that correlates with alpha
+
+Modifications from Exp 44:
+--------------------------
+1. Max speed: 3 m/s -> 6 m/s (action space [-6, 6])
+2. Environment: target at x=150 (was 100), wider obstacle bands
+3. Obstacle y-range: [-10, 10] (was [-8, 8])
+4. OOB bounds: x [-5, 160], y [-20, 20]
+5. Max steps: 800 (was 600)
+6. Speed plot ylim: 8 (was 4.5)
+7. Plot xlim: [-5, 165]
+
+Kept from Exp 44:
+-----------------
+- Systematic sensor bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias U(0.3, 1.0)
+- Obstacle radius U(3.0, 7.0)
+- Action: [kx, ky, alpha, phi]
+- 10M training steps, 16 envs
+- Collision penalty: -100 (unchanged)
+- Progress reward: progress * 50.0 - 1.0 (unchanged)
+
+What we hope to find:
+---------------------
+1. Alpha: clear up-down pattern — high in open, low near obstacles, visible
+   in both the alpha time series and the speed plot
+2. Phi: with higher speeds + sensor uncertainty, there's more danger near
+   obstacles, which may create stronger gradient signal for phi learning
+3. Speed: visible contrast between open-area cruising and obstacle approach
+
+Potential concerns / fixes if results are off:
+----------------------------------------------
+- Collision penalty may be too weak at 6 m/s. At 3 m/s, reward per step is
+  ~15 (0.3m * 50), so collision -100 = ~7 steps of reward. At 6 m/s, reward
+  per step is ~30 (0.6m * 50), so collision -100 = ~3 steps of reward.
+  The relative cost of colliding is halved. If the robot is too reckless,
+  try scaling collision penalty to -200 to maintain the same ratio.
+  However, CBF should enforce safety regardless of reward, so this may not
+  matter. If the robot IS reckless, that could actually help phi learning
+  by creating more pressure.
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

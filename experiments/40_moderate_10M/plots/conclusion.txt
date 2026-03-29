@@ -1,3 +1,44 @@
-TLDR: [TO FILL]
-Exp 40: Moderate difficulty + 10M steps. Bias U(0.3,1.0), error U(-1.0,0.0), random obs radius.
-Does more training time let the policy learn phi under moderate conditions?
+Experiment 40: Moderate Difficulty + 10M Steps
+================================================
+
+Motivation:
+-----------
+Earlier experiments (34-36) used 5M steps and showed phi stuck at 0.01.
+Does doubling training time to 10M under moderate conditions let the
+policy learn phi?
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi] — full ISSf-CBF
+- Dynamics bias: U(0.3, 1.0), random angle, constant per episode
+- Radius error: U(-1.0, 0.0), independent per obstacle (always underestimates)
+- Obstacle radius: U(3.0, 7.0), random per obstacle
+- Training: 10M steps, 16 envs, standard reward (progress*50, collision -100)
+
+What we hoped to find:
+----------------------
+Alpha decreasing near obstacles (proximity-adaptive) and phi increasing
+near obstacles (robustness margin against sensor error and dynamics bias).
+
+What we found:
+--------------
+Original plots (fixed eval: bias=0.7, error=-1.0, radius=5.0):
+  - 8/10 reached — solid navigation improvement over exp 34 (4/8)
+  - Alpha: some proximity-related movement but not strongly visible due
+    to max speed of 3 m/s being too low to show speed contrast
+  - Phi: mostly flat near 0.01, slight movement to ~0.22 in some scenarios
+    but no consistent proximity-adaptive trend
+
+Randomized plots (per-obstacle radius/error, per-scenario bias):
+  - 8/10 reached — consistent with fixed eval
+  - Alpha: similar pattern across varied conditions
+  - Phi: still mostly flat at 0.01 in aggregate policy map
+
+Conclusion:
+-----------
+More training improved navigation success but phi remains largely unused.
+Alpha + kx/ky are sufficient to handle moderate disturbances, giving the
+policy no gradient pressure to learn phi. The radius error being independent
+per obstacle (averaging effect) may also dilute the learning signal.
+The speed ceiling of 3 m/s may also mask alpha's adaptive behavior since
+CBF constraints at different alpha values all allow near-max speed.

@@ -1,3 +1,38 @@
-TLDR: [TO FILL]
-Exp 41: Phi min=0.5, progress*25. Bias U(0.3,1.0), error U(-1.0,0.0), random obs radius.
-Does raising phi floor + reducing progress pressure help phi learn adaptive behavior?
+Experiment 41: Phi Min Rebalance
+=================================
+
+Motivation:
+-----------
+Phi was stuck at 0.01 in earlier experiments. Two changes were made:
+1. Phi floor raised from 0.01 to 0.5 — force the policy to always use some phi
+2. Progress reward halved: 50 -> 25 — reduce penalty for slowing down
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi], phi range [0.5, 10.0] (was [0.01, 10.0])
+- Progress reward: progress * 25.0 (was * 50.0)
+- Dynamics bias: U(0.3, 1.0), radius error: U(-1.0, 0.0)
+- Obstacle radius: U(3.0, 7.0), 10M steps, 16 envs
+
+What we hoped to find:
+----------------------
+That raising the phi floor + reducing progress pressure would let phi
+learn adaptive proximity behavior (going above 0.5 near obstacles).
+
+Results:
+--------
+- 7/10 reached (slightly worse than exp 40's 8/10)
+- Alpha: narrower range (~1.0-1.75), less dynamic than exp 40
+- Phi: pinned at 0.5 (the floor) for nearly everything. One scenario
+  showed a brief spike to ~0.7 but no consistent trend.
+- Speed: generally lower due to halved progress reward
+
+Conclusion:
+-----------
+This experiment was not very meaningful. Artificially inflating the phi
+floor just shifts the flat line from 0.01 to 0.5 — the policy still
+treats phi as a constant it doesn't vary. The reduced progress reward
+hurt navigation without helping phi learn. The problem isn't that phi
+starts too low; it's that the policy has no gradient signal telling it
+"higher phi = safer near obstacles." Raising the floor doesn't create
+that signal.

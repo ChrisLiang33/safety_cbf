@@ -1,7 +1,7 @@
 """
-Exp 43: Fixed Alpha + Phi Only -- fully randomized eval.
-Each scenario samples its own bias magnitude, obstacle radii, and radius errors.
-Action is [kx, ky, phi]. Alpha is FIXED at 1.0.
+Exp 50: Fixed Alpha=2.0 -- fully randomized eval.
+Each scenario samples systematic bias + jitter, obstacle radii, dynamics bias.
+Action is [kx, ky, phi]. Alpha is FIXED at 2.0. Max speed 6 m/s.
 
 Outputs:
   plots_randomized/combined_scenarios.png
@@ -16,15 +16,16 @@ from matplotlib.collections import LineCollection
 from stable_baselines3 import PPO
 import os
 
-from env_dynamic import FixedAlphaPhiOnlyEnv
+from env_dynamic import FixedAlpha20Env
 
 # --- CONFIG ---
 MODEL_PATH = "./models_dynamic/dynamic_10000k_model"
-MAX_STEPS = 600
-FIXED_ALPHA = 1.0
+MAX_STEPS = 800
+FIXED_ALPHA = 2.0
 
 BIAS_MAG_RANGE = (0.3, 1.0)
-RADIUS_ERROR_RANGE = (-1.0, 0.0)
+SYSTEMATIC_BIAS_RANGE = (-0.6, 0.4)
+JITTER_RANGE = (-0.2, 0.2)
 OBS_RADIUS_RANGE = (3.0, 7.0)
 
 OBS_COLORS = ["#e74c3c", "#e67e22", "#9b59b6"]
@@ -34,18 +35,20 @@ TIME_MARKER_INTERVAL = 50
 def generate_scenarios(n=10, seed=42):
     rng = np.random.RandomState(seed)
     scenarios = []
-    x_bands = [(15.0, 35.0), (40.0, 60.0), (65.0, 85.0)]
+    x_bands = [(20.0, 50.0), (60.0, 100.0), (110.0, 140.0)]
     for i in range(n):
         obs_list = []
         obs_radii = []
         obs_errors = []
+        sensor_bias = rng.uniform(*SYSTEMATIC_BIAS_RANGE)
         for x_low, x_high in x_bands:
             x = rng.uniform(x_low, x_high)
-            y = rng.uniform(-8.0, 8.0)
+            y = rng.uniform(-10.0, 10.0)
             obs_list.append(np.array([x, y]))
             obs_radii.append(rng.uniform(*OBS_RADIUS_RANGE))
-            obs_errors.append(rng.uniform(*RADIUS_ERROR_RANGE))
-        target_y = rng.uniform(-3.0, 3.0)
+            jitter = rng.uniform(*JITTER_RANGE)
+            obs_errors.append(sensor_bias + jitter)
+        target_y = rng.uniform(-5.0, 5.0)
         target_radius = rng.uniform(1.5, 3.0)
         bias_angle = rng.uniform(0, 2 * np.pi)
         bias_mag = rng.uniform(*BIAS_MAG_RANGE)
@@ -54,7 +57,8 @@ def generate_scenarios(n=10, seed=42):
             "obs": obs_list,
             "obs_radii": obs_radii,
             "obs_errors": obs_errors,
-            "target_pos": np.array([100.0, target_y]),
+            "sensor_bias": sensor_bias,
+            "target_pos": np.array([150.0, target_y]),
             "target_radius": target_radius,
             "bias_angle": bias_angle,
             "bias_mag": bias_mag,
@@ -73,6 +77,8 @@ def setup_scenario(env, scen):
     env.target_radius = scen["target_radius"]
     env.prev_dist2target = np.linalg.norm(env.robot_pos - env.target_pos)
     env.velocity = np.zeros(2)
+    env.sensor_bias = scen["sensor_bias"]
+    env.current_step = 0
     env.bias = scen["bias_mag"] * np.array([np.cos(scen["bias_angle"]),
                                              np.sin(scen["bias_angle"])])
     return env._get_obs()
@@ -175,7 +181,7 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
     ax.text(5, 14, f"bias={bias_mag:.2f}", fontsize=fontsize_bias,
             color="purple", ha="center", fontweight="bold")
 
-    ax.text(95, -13, f"alpha={FIXED_ALPHA:.1f} (fixed)\nest=true+err",
+    ax.text(145, -18, f"alpha={FIXED_ALPHA:.1f} (fixed)\nsys_bias={scen['sensor_bias']:.2f}m",
             fontsize=fontsize_radius, color="blue", ha="center",
             bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', alpha=0.9))
 
@@ -190,8 +196,8 @@ def plot_trajectory(ax, scen, r, fontsize_title=11, fontsize_label=None, fontsiz
     ax.set_title(f"{scen['name']} -- {status}", fontsize=fontsize_title)
     ax.set_xlabel("x (m)", fontsize=fontsize_label)
     ax.set_ylabel("y (m)", fontsize=fontsize_label)
-    ax.set_xlim(-5, 110)
-    ax.set_ylim(-16, 16)
+    ax.set_xlim(-5, 165)
+    ax.set_ylim(-22, 22)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True, alpha=0.3)
 
@@ -222,11 +228,11 @@ def plot_phi_time(ax, scen, r, fontsize_title=11, fontsize_label=9, fontsize_leg
 def plot_speed(ax, scen, r, fontsize_title=11, fontsize_label=None):
     fontsize_label = fontsize_label or fontsize_title
     ax.plot(r["speeds"], color="black", linewidth=2)
-    ax.axhline(3.0, color="gray", linewidth=0.8, linestyle=":", alpha=0.4, label="Max")
+    ax.axhline(6.0, color="gray", linewidth=0.8, linestyle=":", alpha=0.4, label="Max")
     ax.set_title(f"{scen['name']} -- Speed", fontsize=fontsize_title)
     ax.set_xlabel("Time Step", fontsize=fontsize_label)
     ax.set_ylabel("Speed (m/s)", fontsize=fontsize_label)
-    ax.set_ylim(-0.1, 4.5)
+    ax.set_ylim(-0.1, 8.0)
     ax.grid(True, alpha=0.3)
 
 
@@ -284,7 +290,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     print("Loading model...")
-    env = FixedAlphaPhiOnlyEnv()
+    env = FixedAlpha20Env()
     model = PPO.load(MODEL_PATH)
 
     scenarios = generate_scenarios(n=10, seed=42)
@@ -299,7 +305,7 @@ if __name__ == "__main__":
     n_scen = len(scenarios)
     fig, axs = plt.subplots(n_scen, 6, figsize=(54, 7 * n_scen),
                             gridspec_kw={"width_ratios": [1.4, 1, 1, 1, 1, 1]})
-    fig.suptitle(f"Exp 43: FIXED ALPHA={FIXED_ALPHA} + PHI ONLY (fully randomized eval)",
+    fig.suptitle(f"Exp 50: FIXED ALPHA={FIXED_ALPHA} (fully randomized eval)",
                  fontsize=18, y=1.005)
 
     for i, data in enumerate(all_scenarios):
@@ -349,7 +355,7 @@ if __name__ == "__main__":
 
     # --- AGGREGATE POLICY MAP ---
     fig_agg, (ax_spd, ax_phi) = plt.subplots(1, 2, figsize=(18, 8))
-    fig_agg.suptitle(f"Exp 43 (Fixed Alpha={FIXED_ALPHA}): Speed & Phi vs Distance (fully randomized eval)",
+    fig_agg.suptitle(f"Exp 50 (Fixed Alpha={FIXED_ALPHA}, 6 m/s, collision -250): Speed & Phi vs Distance (fully randomized eval)",
                      fontsize=14)
 
     colors = plt.cm.tab10(np.linspace(0, 1, len(all_scenarios)))
@@ -384,17 +390,17 @@ if __name__ == "__main__":
     print(f"FULLY RANDOMIZED SCENARIOS (alpha={FIXED_ALPHA} fixed)")
     print(f"{'='*90}")
     print(f"{'Scenario':<12} {'Reached':>8} {'Collided':>9} {'MinDist':>9} "
-          f"{'Steps':>7} {'AvgSpd':>8} {'PathEff':>9} {'BiasMag':>9} {'Errors':>20}")
-    print(f"{'-'*100}")
+          f"{'Steps':>7} {'AvgSpd':>8} {'MaxSpd':>8} {'PathEff':>9} {'BiasMag':>9} {'SysBias':>8}")
+    print(f"{'-'*110}")
 
     for data in all_scenarios:
         scen, r = data["scen"], data["result"]
-        errs = ", ".join(f"{e:.2f}" for e in scen["obs_errors"])
         print(f"{scen['name']:<12} "
               f"{'Yes' if r['reached_target'] else 'No':>8} "
               f"{'YES' if r['collided'] else 'No':>9} "
               f"{r['min_clearance']:>9.3f} {r['steps']:>7} "
-              f"{np.mean(r['speeds']):>8.2f} {r['path_efficiency']:>9.2f} "
-              f"{scen['bias_mag']:>9.2f} [{errs}]")
+              f"{np.mean(r['speeds']):>8.2f} {max(r['speeds']):>8.2f} "
+              f"{r['path_efficiency']:>9.2f} "
+              f"{scen['bias_mag']:>9.2f} {scen['sensor_bias']:>8.2f}")
 
     print(f"\nDone! Plots saved to {save_dir}")

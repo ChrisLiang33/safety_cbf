@@ -1,0 +1,42 @@
+Experiment 49: Fixed Alpha=4.0 + Combined Best
+=================================================
+NOT YET RUN
+
+Based on: Exp 48 (fixed alpha + combined best) with alpha=4.0 instead of 1.0
+
+Motivation:
+-----------
+Alpha=4.0 is very aggressive — the CBF constraint is very loose, allowing
+the robot to approach obstacles at high speed. This makes phi absolutely
+critical: without phi adding a robustness margin, the robot will collide
+frequently. This should create the strongest possible gradient signal for
+phi learning.
+
+The risk is that alpha=4.0 may cause so many collisions during training
+that the policy can't learn to navigate at all.
+
+Setup:
+------
+- Action: [kx, ky, phi] — alpha FIXED at 4.0
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0)
+- Obstacle radius: U(3.0, 7.0)
+- Collision penalty: -250
+- 10M steps, 16 envs
+
+Comparisons:
+------------
+- vs Exp 48 (alpha=1.0): does much higher alpha push phi to learn more?
+- vs Exp 50 (alpha=2.0): three-way comparison at 1.0, 2.0, 4.0
+
+Potential concerns:
+-------------------
+- Alpha=4.0 is at the upper bound of the alpha action space in
+  experiments where alpha is learned. Very aggressive.
+- May cause too many collisions, making training unstable.
+- Navigation success rate could be very low.
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

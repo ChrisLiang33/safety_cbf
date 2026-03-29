@@ -1,3 +1,45 @@
-TLDR: [TO FILL]
-Exp 43: Fixed alpha=1.0, only phi learned. Bias U(0.3,1.0), error U(-1.0,0.0), random obs radius.
-With alpha fixed, phi is the ONLY safety knob. Does it learn to adapt?
+Experiment 43: Fixed Alpha + Phi Only
+=======================================
+
+Motivation:
+-----------
+In all previous experiments (40-42), the policy could use alpha instead of
+phi for safety, so it never bothered learning phi. By fixing alpha at 1.0
+and removing it from the action space, phi becomes the ONLY safety knob.
+If phi can't learn under these conditions, it can't learn at all.
+
+Setup:
+------
+- Action: [kx, ky, phi] — alpha FIXED at 1.0, NOT learned
+- Phi range: [0.01, 10.0]
+- Dynamics bias: U(0.3, 1.0), radius error: U(-1.0, 0.0)
+- Obstacle radius: U(3.0, 7.0), 10M steps, 16 envs
+- Collision penalty: -100, progress*50
+
+What we hoped to find:
+----------------------
+With alpha removed as a competing safety knob, phi is forced to learn
+proximity-adaptive behavior or the robot fails.
+
+Results:
+--------
+- 5/10 reached — worst navigation of exp 40-43, which makes sense since
+  alpha is locked and can't adapt
+- Phi: MOST INTERESTING RESULT OF ALL EXPERIMENTS. The aggregate policy
+  map shows a visible general trend: phi tends to be higher at closer
+  distances (~0.4-0.6 near obstacles) and lower far away (~0.0-0.3).
+  Not a perfect curve, but clearly more structure than any other experiment.
+  Multiple scenarios show this pattern consistently.
+- Speed: robot slows near obstacles — since alpha is fixed, only phi
+  tightens the CBF constraint, and speed drops confirm phi is active.
+
+Conclusion:
+-----------
+This is our strongest evidence that phi CAN learn proximity-adaptive
+behavior when forced to. Removing alpha as a competing safety knob is
+the key ingredient. Navigation suffers (5/10 vs 8/10 in exp 40), but
+the phi signal is real and consistent.
+
+Takeaway: the fixed-alpha approach should be carried forward into newer
+experiment setups (systematic sensor error, higher speed, higher collision
+penalty) to see if phi learning improves further with better conditions.
