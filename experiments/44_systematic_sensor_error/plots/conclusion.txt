@@ -1,33 +1,47 @@
 Experiment 44: Systematic Sensor Error
 =======================================
-NOT YET RUN
 
 Motivation:
 -----------
 In exp 40 (and earlier), sensor error was sampled independently per obstacle.
 With 3 obstacles, the effective error averages out (CLT-like), weakening the
-gradient signal for phi. A real sensor has a systematic calibration bias that
-affects all measurements, plus small per-measurement jitter.
-
-This experiment uses a realistic two-level sensor error model to create a
-coherent signal: some episodes the sensor is badly off on everything (phi
-should be high), others it's accurate (phi can be low).
+gradient signal for phi. This experiment uses a two-level sensor error model:
+  - systematic_bias: U(-0.6, 0.4), sampled once per episode (all obstacles)
+  - jitter: U(-0.2, 0.2), sampled per obstacle
+Also handles general uncertainty (both under- and overestimation).
 
 Setup:
 ------
 - Action: [kx, ky, alpha, phi] — full ISSf-CBF
-- Sensor error = systematic_bias + jitter
-  - systematic_bias: U(-0.6, 0.4), sampled ONCE per episode (all obstacles)
-  - jitter: U(-0.2, 0.2), sampled per obstacle
-  - Handles general uncertainty (both under- and overestimation)
-- Dynamics bias: U(0.3, 1.0), random angle, constant per episode
-- Obstacle radius: U(3.0, 7.0), random per obstacle
-- Training: 10M steps, 16 envs, standard reward
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0)
+- Obstacle radius: U(3.0, 7.0)
+- Collision penalty: -100, progress*50
+- 10M steps, 16 envs
 
-What we hope to find:
----------------------
-1. Phi learning a stronger signal than exp 40, because the sensor error
-   is now coherent across obstacles within an episode
-2. Episodes with large negative sys_bias should push phi high
-3. Episodes with positive sys_bias should allow phi to stay low
-4. The policy learns to map perceived uncertainty to phi adaptively
+What we hoped to find:
+----------------------
+Coherent sensor error across obstacles would create a stronger gradient
+signal for phi. Episodes with large negative bias → phi high.
+Episodes with positive bias → phi low.
+
+Results:
+--------
+- ~2/10 reached — much worse than exp 40 (8/10)
+- Alpha: some proximity-adaptive behavior, similar to exp 40
+- Phi: mostly flat at 0.01. A few scenarios show bumps to ~0.15-0.20
+  but very sparse. No meaningful improvement over exp 40.
+
+Conclusion:
+-----------
+The systematic sensor error model alone did not help phi learn, and it
+hurt navigation significantly. The bidirectional error (can overestimate)
+may be harder for the policy — overestimation makes the CBF overly
+conservative, potentially trapping the robot. With alpha still available
+as the competing safety knob, phi remains unused regardless of the
+sensor error structure. Reinforces that fixing alpha (exp 43) is the
+key ingredient, not the sensor error model.
+
+Not sure why navigation dropped so much — could be the positive sensor
+bias causing overly conservative CBF behavior, or the different error
+distribution requiring more training time to adapt to.

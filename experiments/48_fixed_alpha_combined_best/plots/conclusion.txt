@@ -1,50 +1,42 @@
-Experiment 48: Fixed Alpha + Combined Best
+Experiment 48: Fixed Alpha=1.0 + Combined Best
 ============================================
-NOT YET RUN
 
 Based on: Exp 43 (fixed alpha) + Exp 46 (combined best)
 
 Motivation:
 -----------
-Exp 43 showed phi CAN learn proximity-adaptive behavior when alpha is fixed.
-Exp 42 showed higher collision penalty creates more phi activity. This
-experiment combines everything: fixed alpha forces phi to be the only knob,
-higher speed gives room for visible speed contrast, coherent sensor error
-gives a clean learning signal, and moderate collision penalty adds pressure.
-
-This is our best shot at getting clean, strong phi learning.
+Combine everything: fixed alpha forces phi to be the only knob, higher
+speed gives room for speed contrast, coherent sensor error gives clean
+learning signal, collision -250 adds pressure.
 
 Setup:
 ------
 - Action: [kx, ky, phi] — alpha FIXED at 1.0
 - Max speed: 6 m/s, target at x=150, 800 max steps
 - Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
-- Dynamics bias: U(0.3, 1.0)
-- Obstacle radius: U(3.0, 7.0)
-- Collision penalty: -250 (from exp 42 takeaway)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Collision penalty: -250
 - 10M steps, 16 envs
-
-What we hope to find:
----------------------
-1. Strongest phi proximity-adaptive behavior of all experiments
-2. Clear phi-vs-distance trend in aggregate policy map
-3. Visible speed drops near obstacles correlated with phi increases
-4. Reasonable navigation success rate despite fixed alpha
-
-Comparisons:
-------------
-- vs Exp 47: same but with collision -250 instead of -100 — does
-  collision penalty add value on top of fixed alpha?
-- vs Exp 46: same conditions but alpha fixed — how much does removing
-  alpha help phi?
-- vs Exp 43: same fixed alpha but all conditions improved
-
-Potential concerns / fixes:
----------------------------
-- Fixed alpha + higher speed + collision penalty may be too hard —
-  navigation could suffer badly. If <3/10 reach, consider 15-20M steps.
-- If phi overshoots (too conservative), consider narrower phi range.
 
 Results:
 --------
-[TO FILL AFTER TRAINING]
+- ~9/10 reached — excellent navigation
+- Speed: near max (~6 m/s) throughout, no dramatic dips
+- Phi: more activity than exp 47. Range ~0.01-0.5, some scenarios show
+  phi increasing at closer distances. Collision penalty IS helping.
+  Still not as clean as exp 43's phi behavior.
+- Speed vs distance aggregate: clear speed drop at close distances
+
+Conclusion:
+-----------
+Collision penalty (-250) adds value on top of fixed alpha — exp 48 shows
+more phi activity than exp 47 (-100). But the "avoid rather than engage"
+pattern persists: the environment is wide enough that the robot steers
+around obstacles rather than passing close, so phi is rarely stressed.
+
+Key problem: the map is wide enough that going around is always faster
+than going through. The robot has no reason to approach closely.
+
+Potential fix: narrow the corridor (tighter y-range or more obstacles)
+to force unavoidable close encounters. The robot MUST pass near obstacles
+regardless of steering, creating the conditions where phi is truly needed.

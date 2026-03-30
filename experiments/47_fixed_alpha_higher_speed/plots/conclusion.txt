@@ -1,42 +1,50 @@
-Experiment 47: Fixed Alpha + Higher Speed + Two-Level Sensor Error
+Experiment 47: Fixed Alpha=1.0 + Higher Speed + Two-Level Sensor Error
 ===================================================================
-NOT YET RUN
 
 Based on: Exp 43 (fixed alpha) + Exp 45 (higher speed + sensor error)
 
 Motivation:
 -----------
-Exp 43 showed the strongest phi proximity-adaptive behavior of all experiments
-by fixing alpha=1.0, forcing phi to be the only safety knob. However, it used
-the old setup (3 m/s, small env, independent per-obstacle errors).
-
-This experiment applies the fixed-alpha approach to the improved training
-conditions: higher speed (6 m/s), larger environment, and the two-level
-sensor error model (systematic bias + per-obstacle jitter).
+Exp 43 showed the strongest phi proximity-adaptive behavior by fixing
+alpha=1.0. This experiment applies fixed alpha to the improved setup:
+6 m/s, larger environment, systematic sensor error.
 
 Setup:
 ------
 - Action: [kx, ky, phi] — alpha FIXED at 1.0
 - Max speed: 6 m/s, target at x=150, 800 max steps
 - Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
-- Dynamics bias: U(0.3, 1.0)
-- Obstacle radius: U(3.0, 7.0)
-- Collision penalty: -100 (standard)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Collision penalty: -100
 - 10M steps, 16 envs
-
-What we hope to find:
----------------------
-1. Phi showing clear proximity-adaptive behavior (like exp 43 but stronger)
-2. Higher speed creating more visible speed contrast when phi tightens CBF
-3. Coherent sensor error giving phi a cleaner learning signal than exp 43
-
-Comparisons:
-------------
-- vs Exp 43: same fixed alpha, but better training conditions — expect
-  stronger phi signal
-- vs Exp 45: same conditions, but alpha fixed — expect more phi activity
-  at cost of navigation success
 
 Results:
 --------
-[TO FILL AFTER TRAINING]
+- ~8/10 reached — much better than exp 43 (5/10)
+- Speed: hovers ~5-6 m/s. Aggregate speed vs distance DOES show speed
+  dropping from ~6 down to ~1-2 m/s at close distances — the speed
+  contrast we wanted. But the robot rarely gets that close.
+- Phi: flat at ~0.01. A few scattered points to ~0.05-0.10 but no
+  proximity-adaptive behavior. Phi did NOT learn here.
+
+Conclusion:
+-----------
+Surprising result: exp 43 (3 m/s, small env) showed phi learning 0.0-0.7,
+but this experiment (6 m/s, large env) shows phi flat at 0.01 — despite
+both having fixed alpha=1.0.
+
+The difference is NOT the speed — it's the environment geometry relative
+to the speed. At 6 m/s in a large environment, the robot has enough room
+and speed to steer around all obstacles without ever getting close. Phi
+is never needed, so it never learns.
+
+At 3 m/s in a smaller environment, the robot was forced into close
+encounters, making phi necessary for survival.
+
+Key insight: phi learning depends on whether the robot faces UNAVOIDABLE
+close encounters with obstacles, not on the speed itself. The training
+environment needs to create situations where close approach is inevitable.
+
+Future direction: instead of changing speed, consider tighter obstacle
+placement (narrow gaps, corridors) that force close encounters regardless
+of speed.
