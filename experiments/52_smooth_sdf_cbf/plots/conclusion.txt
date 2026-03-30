@@ -1,0 +1,51 @@
+Experiment 52: Smooth SDF-Based CBF
+=====================================
+NOT YET RUN
+
+Based on: Exp 45 setup with smoothed SDF from paper (equation 20)
+
+Motivation:
+-----------
+Following the paper's formulation, use a smoothed signed distance function:
+  h(x) = lambda * (1 - e^{-gamma * sdf(x)})
+  where sdf(x) = ||x - obs|| - r
+
+Properties:
+  - Saturates at lambda far from obstacles (h -> lambda)
+  - Goes to 0 at obstacle surface (h -> 0)
+  - Gradient is strong near obstacles, weak far away
+  - dh/dx = lambda * gamma * e^{-gamma*sdf} * unit_vector
+  - This naturally focuses the CBF constraint where it matters
+
+Parameters: lambda=1.0, gamma=0.5
+
+Compared to exp 51 (simple SDF), the smooth version:
+  - Reduces chattering when switching closest obstacle
+  - Creates naturally proximity-weighted constraint strength
+  - May help phi learning by making the constraint more "felt" near obstacles
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi]
+- CBF: h = lambda*(1 - e^{-gamma*sdf}), lambda=1.0, gamma=0.5
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Collision penalty: -100, progress*50
+- 10M steps, 16 envs
+
+Comparisons:
+------------
+- vs Exp 45: squared CBF (original)
+- vs Exp 51: simple SDF CBF
+- Three-way comparison of CBF formulations on same environment
+
+Potential concerns:
+-------------------
+- Lambda and gamma values may need tuning. gamma=0.5 means the
+  constraint starts engaging around sdf~2m (e^{-1} ~ 0.37).
+  If too conservative or too loose, adjust gamma.
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

@@ -1,0 +1,50 @@
+Experiment 51: SDF-Based CBF
+=============================
+NOT YET RUN
+
+Based on: Exp 45 setup with CBF formulation changed to signed distance function
+
+Motivation:
+-----------
+Collaborator suggested switching from squared distance to SDF, following
+the paper's formulation. The key theoretical difference:
+
+  Previous (squared):  h = ||x-obs||^2 - r^2,  Lgh = 2(x-obs)
+  SDF:                 h = ||x-obs|| - r,       Lgh = (x-obs)/||x-obs||
+
+With the squared version, ||Lgh||^2 scales with distance^2. This makes
+the phi term in the ISSf-CBF constraint:
+  (||Lgh||^2 * phi) / h  ~  (4*dist^2 * phi) / (dist^2 - r^2)
+The phi effect is distance-dependent in a complex way.
+
+With SDF, ||Lgh||^2 = 1 (unit vector), so the phi term simplifies to:
+  phi / max(h, eps)  =  phi / (dist - r)
+Phi's effect is purely a function of proximity — cleaner, more
+interpretable, and potentially easier for the policy to learn.
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi]
+- CBF: h = ||x-obs|| - r_est, Lgh = unit vector
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Collision penalty: -100, progress*50
+- 10M steps, 16 envs
+
+What we hope to find:
+---------------------
+1. With phi's effect being purely proximity-based (phi/h), the policy
+   may learn phi more easily — the gradient signal is cleaner
+2. Direct comparison to exp 45 (same setup, squared CBF) shows whether
+   the CBF formulation matters for phi learning
+3. Alpha should still show proximity-adaptive behavior
+
+Comparisons:
+------------
+- vs Exp 45: identical setup except CBF formulation (squared vs SDF)
+  Any difference in phi behavior is attributable to the CBF change
+
+Results:
+--------
+[TO FILL AFTER TRAINING]
