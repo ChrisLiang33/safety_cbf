@@ -1,0 +1,38 @@
+Experiment 55: SHIELD SDF + Fixed Alpha=2.0 + Collision -250
+==============================================================
+NOT YET RUN
+
+Based on: Exp 53 (SHIELD SDF) + Exp 50 (fixed alpha=2.0, collision -250)
+
+Motivation:
+-----------
+This is the KEY experiment for the SHIELD SDF formulation. Exp 50
+(squared CBF + fixed alpha=2.0) showed our strongest phi learning
+(phi 0.1-0.8, visible proximity structure). Does the SHIELD SDF
+produce even better phi behavior?
+
+The SHIELD SDF's phi term is conceptually aligned with Theorem 2's
+projected covariance: ||Lgh||^2 already captures only the e_i
+direction, so phi learns to approximate the uncertainty magnitude
+along the obstacle direction.
+
+Setup:
+------
+- Action: [kx, ky, phi] — alpha FIXED at 2.0
+- CBF: SHIELD SDF pipeline (Eq 19-22), single constraint
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Collision penalty: -250
+- 10M steps, 16 envs
+
+Comparisons:
+------------
+- vs Exp 50: same fixed alpha + collision, but squared CBF with 3 constraints
+  THE key comparison — does SHIELD SDF improve phi learning?
+- vs Exp 54: same SHIELD SDF + collision, but alpha learned
+  Does fixing alpha help with SHIELD SDF too?
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

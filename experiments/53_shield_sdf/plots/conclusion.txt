@@ -1,0 +1,77 @@
+Experiment 53: SHIELD SDF Pipeline
+====================================
+NOT YET RUN
+
+Based on: SHIELD paper (Yang et al., IROS 2025) Equations 19-24
+
+Motivation:
+-----------
+Implement the full SHIELD SDF pipeline for the CBF, as suggested by
+collaborator. This is the multi-obstacle SDF formulation from the paper.
+
+Implementation (Eq 19-22):
+--------------------------
+1. Raw SDF (Eq 19): sdf = min_i ||p - rho_i|| - R_i
+   - Find closest obstacle, use its distance
+2. Smooth (Eq 20): h = lambda * (1 - exp(-gamma * sdf))
+   - Removes chattering when closest obstacle switches
+   - Function is concave, required for Jensen's inequality
+3. Concave approx (Eq 21): project distance along e_i from PREVIOUS step
+   - Makes h concave in x with computable Hessian bound lambda_max
+   - e_i = unit direction from closest obstacle to robot (prev timestep)
+4. Piecewise extension (Eq 22): linear approx when behind obstacle
+   - Handles edge case where (p - rho_i)^T e_i < 0
+
+Theorem 2 (Eq 23) — Projected Covariance:
+------------------------------------------
+The paper shows the uncertainty penalty should use PROJECTED covariance:
+  E[h_tilde(x)] >= h_tilde(E[x]) - (lambda_max/2) * e_i^T * cov(x) * e_i
+
+This is tighter than Proposition 1's general bound which uses tr(cov(x)).
+Only penalizes uncertainty along the obstacle direction, not perpendicular.
+Less conservative behavior.
+
+Full Constraint (Eq 24):
+------------------------
+  h_tilde(F(x) + G(x)u + E[d]) - (lambda_max/2) e^T cov(d) e >= alpha * h_k
+
+Our ISSf-CBF maps to this:
+  - Paper's E[d]: our constant bias (dynamics disturbance)
+  - Paper's (lambda_max/2) e^T cov(d) e: our phi term (||Lgh||^2 * phi) / h
+    Since Lgh = lambda*gamma*exp(-gamma*proj)*e_i, ||Lgh||^2 is already
+    projected along e_i. So phi learns to approximate the covariance penalty.
+  - Paper's alpha from Freedman's inequality: our alpha learned via RL
+  - Paper recomputes alpha every K steps: ours adapts continuously
+
+Parameters: lambda=1.0, gamma=0.5
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi]
+- CBF: SHIELD SDF pipeline (Eq 19-22), single constraint (closest obs)
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Collision penalty: -100, progress*50
+- 10M steps, 16 envs
+
+Comparisons:
+------------
+- vs Exp 45: squared CBF, 3 constraints
+- vs Exp 51: simple SDF, 3 constraints
+- vs Exp 52: smooth SDF, 3 constraints
+- Exp 53 is the only one with: single constraint + concave approx +
+  prev-step e_i + piecewise extension
+
+Important caveats (from paper):
+-------------------------------
+1. Theoretical guarantees only proven for single-obstacle (Theorem 2).
+   Multi-obstacle works in practice but formal bound may not hold.
+2. Concave approximation projects distance onto one direction — tight
+   enough at high update rates with small timesteps.
+3. Alpha recomputed every K steps in paper (union bound extension).
+   We learn alpha continuously which is different.
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

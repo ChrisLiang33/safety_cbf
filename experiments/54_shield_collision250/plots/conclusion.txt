@@ -1,0 +1,32 @@
+Experiment 54: SHIELD SDF + Collision -250
+===========================================
+NOT YET RUN
+
+Based on: Exp 53 (SHIELD SDF) + Exp 46 (collision -250)
+
+Motivation:
+-----------
+Does the SHIELD SDF formulation change phi behavior compared to the
+squared CBF when both use the same collision penalty?
+Direct comparison to Exp 46 (squared CBF, learned alpha, collision -250).
+
+Setup:
+------
+- Action: [kx, ky, alpha, phi]
+- CBF: SHIELD SDF pipeline (Eq 19-22), single constraint
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Collision penalty: -250
+- 10M steps, 16 envs
+
+Comparisons:
+------------
+- vs Exp 46: same setup but squared CBF with 3 constraints
+  Any difference = effect of SHIELD SDF formulation
+- vs Exp 53: same SHIELD SDF but collision -100
+  Any difference = effect of collision penalty
+
+Results:
+--------
+[TO FILL AFTER TRAINING]
