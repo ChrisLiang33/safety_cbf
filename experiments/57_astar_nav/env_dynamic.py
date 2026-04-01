@@ -338,7 +338,7 @@ class AStarNavEnv(gym.Env):
         if dist2target < self.target_radius:
             reward += 100.0
             terminated = True
-        if self.robot_pos[0] < -5 or self.robot_pos[0] > 160 or abs(self.robot_pos[1]) > 20:
+        if self.robot_pos[0] < -5 or self.robot_pos[0] > 165 or abs(self.robot_pos[1]) > 22:
             reward -= 50.0
             terminated = True
         if self.current_step >= self.max_steps:
