@@ -93,7 +93,7 @@ def run_episode(env, model, scen):
         traj_x.append(env.robot_pos[0])
         traj_y.append(env.robot_pos[1])
         dists = [np.linalg.norm(env.robot_pos - env.obs_pos[i]) - env.true_radius[i]
-                 for i in range(3)]
+                 for i in range(N_OBS)]
         dist_list.append(min(dists))
         for oi in range(N_OBS):
             per_obs_dists[oi].append(dists[oi])
@@ -187,11 +187,11 @@ def plot_alpha_phi_time(ax, scen, r, fontsize_title=14, fontsize_label=12, fonts
     ax2.plot(r["phis"], color="red", linewidth=1.5, label="phi", alpha=0.7)
     ax2.set_ylabel("Phi", color="red", fontsize=fontsize_label)
     ax2.tick_params(axis='y', labelcolor='red')
-    for oi in range(3):
+    for oi in range(N_OBS):
         close_mask = np.array(r["per_obs_dists"][oi]) < 5.0
         for si in range(len(close_mask)):
             if close_mask[si]:
-                ax.axvspan(si, si+1, color=OBS_COLORS[oi], alpha=0.1)
+                ax.axvspan(si, si+1, color=OBS_COLORS[oi % len(OBS_COLORS)], alpha=0.1)
     ax.set_title(f"{scen['name']} -- Alpha+Phi + Obs Zone", fontsize=fontsize_title)
     ax.set_xlabel("Time Step", fontsize=fontsize_label)
     ax.set_ylabel("Alpha", color="blue", fontsize=fontsize_label)

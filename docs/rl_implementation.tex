@@ -1,0 +1,294 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+
+\title{Full RL Implementation --- ISSf-CBF with Adaptive Parameters}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Core Concept}
+
+The agent learns parameters for an Input-to-State Safe Control Barrier Function (ISSf-CBF) that provides adaptive robustness margins for obstacle avoidance under dynamics disturbance and sensor uncertainty.
+
+ISSf-CBF constraint:
+
+\begin{verbatim}
+Lgh @ u >= -alpha * h(x) + (||Lgh||^2 * phi) / max(h(x), eps)
+\end{verbatim}
+
+\begin{itemize}
+\item alpha controls CBF decay rate --- how quickly the safety value can decrease
+\item phi adds a robustness margin --- compensates for unmodeled disturbance and sensor error
+\item The QP finds u\_safe = argmin $||$u - k\_nom$||^2$ subject to this constraint
+\end{itemize}
+
+
+\section*{What the Agent Controls}
+
+Two architectures evolved over experiments:
+
+\begin{tabular}{lll}
+\toprule
+Architecture & Action Space & Navigation Source \\
+\midrule
+Joint (exp 40-55) & [kx, ky, alpha, phi] (4D) & Learned jointly \\
+Decoupled (exp 56-60) & [alpha, phi] (2D) & Frozen policy or A* planner \\
+\bottomrule
+\end{tabular}
+
+\vspace{1em}
+The decoupled architecture produces stronger alpha/phi learning because the navigation layer cannot absorb the safety signal.
+
+
+\section*{CBF Formulations (Evolution)}
+
+\subsection*{Original --- Squared Distance (exp 31-50)}
+
+\begin{verbatim}
+h(x) = ||robot_pos - obs_pos||^2 - estimated_radius^2
+Lgh = 2 * (robot_pos - obs_pos)
+\end{verbatim}
+
+3 independent QP constraints (one per obstacle). $||$Lgh$||^2$ scales with distance$^2$ --- phi's effect is distance-dependent.
+
+
+\subsection*{SHIELD SDF Pipeline (exp 53+, from Yang et al. IROS 2025, Eq 19-22)}
+
+\begin{verbatim}
+Step 1 (Eq 19): sdf(x) = min_i ||p - rho_i|| - R_i       (closest obstacle)
+Step 2 (Eq 20): h_smooth = lambda * (1 - exp(-gamma * sdf(x)))  (smooth, concave)
+Step 3 (Eq 21): h_hat uses projected distance along e_i from PREVIOUS timestep
+Step 4 (Eq 22): piecewise extension for robot "behind" obstacle
+\end{verbatim}
+
+\begin{itemize}
+\item Single QP constraint (closest obstacle only)
+\item e\_i = unit direction from closest obstacle to robot (previous timestep makes h concave)
+\item Lgh = lambda * gamma * exp(-gamma * proj\_dist) * e\_i
+\item $||$Lgh$||^2$ is naturally directional --- phi's effect aligns with Theorem 2's projected covariance
+\item Parameters: lambda = 1.0, gamma = 0.5
+\end{itemize}
+
+Piecewise extension (Eq 22):
+\begin{itemize}
+\item If (p - rho\_i)$^T$ * e\_i $\geq$ 0: robot in front of obstacle --- use concave approx
+\item Else: robot behind obstacle --- linear approximation using gradient at boundary
+\end{itemize}
+
+
+\subsection*{Connection to Theorem 2 (Eq 23-24)}
+
+Paper's constraint:
+\begin{verbatim}
+h_tilde(F + Gu + E[d]) - (lambda_max/2) * e^T * cov(d) * e >= alpha * h_k
+\end{verbatim}
+
+Our phi term serves the same role as the projected covariance penalty: since Lgh is proportional to e\_i, the term ($||$Lgh$||^2$ * phi) / h captures uncertainty only along the obstacle direction. The learned phi approximates the covariance magnitude that the paper computes from a CVAE.
+
+
+\section*{Noise Model --- Two Sources of Uncertainty}
+
+\subsection*{1. Dynamics Disturbance (wind / model error)}
+
+\begin{verbatim}
+bias_magnitude = U(0.3, 1.0)    # sampled once per episode
+bias_angle = U(0, 2*pi)         # random direction
+bias = bias_magnitude * [cos(bias_angle), sin(bias_angle)]
+
+# Applied every timestep:
+robot_pos += safe_u * dt + bias * dt
+\end{verbatim}
+
+Constant per episode --- avoids CLT averaging across timesteps. The phi term should learn to compensate for this unmodeled force.
+
+
+\subsection*{2. Sensor Error (perception uncertainty)}
+
+Two-level model (systematic calibration bias + per-measurement jitter):
+
+\begin{verbatim}
+systematic_bias = U(-0.6, 0.4)  # once per episode, all obstacles
+jitter_i = U(-0.2, 0.2)         # per obstacle
+error_i = systematic_bias + jitter_i
+
+estimated_radius_i = max(true_radius_i + error_i, 1.0)
+\end{verbatim}
+
+\begin{itemize}
+\item true\_radius: used for collision detection (ground truth)
+\item estimated\_radius: what the robot believes, used in CBF computation
+\item Negative error = underestimate (dangerous: CBF thinks obstacle is smaller)
+\item Positive error = overestimate (conservative: robot thinks obstacle is bigger)
+\item Systematic bias is coherent across all obstacles --- stronger learning signal than independent errors
+\end{itemize}
+
+
+\section*{Observation Space}
+
+14-dimensional for 3 obstacles (20D for 5 obstacles):
+
+\begin{verbatim}
+obs = [
+    # Per obstacle (3 or 5):
+    obs_x - robot_x,           # relative x position
+    obs_y - robot_y,           # relative y position
+    estimated_radius,          # what robot believes (includes sensor error)
+    # ... repeated for each obstacle
+
+    # Target:
+    target_x - robot_x,       # relative x to target
+    target_y - robot_y,       # relative y to target
+    target_radius,             # acceptance radius
+
+    # Velocity:
+    vx, vy                     # current robot velocity
+]
+\end{verbatim}
+
+All positions are relative --- the policy sees distances, not absolute coordinates.
+
+
+\section*{Environment Setup}
+
+\begin{tabular}{ll}
+\toprule
+Parameter & Value \\
+\midrule
+Timestep dt & 0.1 s \\
+Max speed & 6.0 m/s (action bounds [-6, 6]) \\
+Target position & (150.0, U(-5, 5)) \\
+Max steps per episode & 800 \\
+Out-of-bounds & x in [-5, 160], y in [-20, 20] \\
+Number of obstacles & 3 (or 5 in exp 60) \\
+Obstacle x-bands & [20,50], [60,100], [110,140] \\
+Obstacle y-range & U(-10, 10) (or U(-4, 4) tight) \\
+Obstacle radius & U(3.0, 7.0) per obstacle \\
+\bottomrule
+\end{tabular}
+
+
+\section*{Domain Randomization}
+
+All parameters sampled per episode to ensure generalization:
+
+\begin{tabular}{lll}
+\toprule
+Parameter & Range & Scope \\
+\midrule
+Obstacle positions & x-bands, y-range & Per obstacle \\
+Obstacle true radius & U(3.0, 7.0) & Per obstacle \\
+Sensor systematic bias & U(-0.6, 0.4) & Per episode \\
+Sensor jitter & U(-0.2, 0.2) & Per obstacle \\
+Dynamics bias magnitude & U(0.3, 1.0) & Per episode \\
+Dynamics bias angle & U(0, 2*pi) & Per episode \\
+Target y-position & U(-5, 5) & Per episode \\
+Target radius & U(1.5, 3.0) & Per episode \\
+\bottomrule
+\end{tabular}
+
+
+\section*{Reward Structure}
+
+\begin{verbatim}
+if collision (true_dist < 0):
+    reward = -250.0
+    terminated = True
+else:
+    progress = prev_dist2target - dist2target
+    reward = progress * 50.0 - 1.0   # progress toward goal, time penalty
+
+if reached_target:
+    reward += 100.0
+    terminated = True
+
+if out_of_bounds:
+    reward -= 50.0
+    terminated = True
+\end{verbatim}
+
+The collision penalty magnitude affects phi learning: higher penalty (-250 vs -100) creates more pressure to use phi for safety margins.
+
+
+\section*{Robot Dynamics}
+
+Single integrator --- position is directly controlled by velocity:
+
+\begin{verbatim}
+robot_pos += safe_u * dt + bias * dt
+\end{verbatim}
+
+safe\_u comes from the QP (modified k\_nom). bias is the unmodeled dynamics disturbance.
+
+
+\section*{QP Safety Filter}
+
+\begin{verbatim}
+u_safe = argmin ||u - k_nom||^2
+    subject to: Lgh @ u >= -alpha * h + (||Lgh||^2 * phi) / max(h, eps)
+\end{verbatim}
+
+\begin{itemize}
+\item Squared CBF: 3 constraints (one per obstacle)
+\item SHIELD SDF: 1 constraint (closest obstacle only)
+\item Solver: CVXPY with OSQP backend, warm-started
+\item Fallback: u\_safe = [0, 0] on solver failure
+\item Output clipped to [-max\_speed, max\_speed]
+\end{itemize}
+
+
+\section*{Navigation Strategies (Decoupled Architecture)}
+
+\subsection*{Frozen Learned Policy (exp 56, 58)}
+
+Phase 1: Train navigation policy: obs $\rightarrow$ [kx, ky] (with or without obstacles).
+
+Phase 2: Freeze nav policy, train safety policy: obs $\rightarrow$ [alpha, phi].
+
+The frozen navigator drives the robot near obstacles because it cannot adapt --- the CBF must intervene, providing consistent gradient signal for alpha/phi.
+
+\subsection*{A* Path Planner (exp 57, 59, 60)}
+
+Classical A* on an occupancy grid:
+\begin{itemize}
+\item Grid resolution: 1.0 m/cell
+\item Obstacle inflation: estimated\_radius + margin (0.5-1.0 m)
+\item 8-connected neighbors
+\item Replan every 50 timesteps
+\item Waypoint following: proportional controller with K\_p = 4.0, threshold 3.0 m
+\end{itemize}
+
+A* provides optimal shortest paths and will route through tight spaces, guaranteeing near-obstacle training signal.
+
+
+\section*{Training Configuration}
+
+\begin{tabular}{ll}
+\toprule
+Parameter & Value \\
+\midrule
+Algorithm & PPO (Stable Baselines 3) \\
+Policy network & MlpPolicy \\
+Device & CUDA (RTX 5090) \\
+Rollout steps & 4096 per env \\
+Parallel environments & 16 (SubprocVecEnv) \\
+Total timesteps & 10M (5M for easy nav phase) \\
+\bottomrule
+\end{tabular}
+
+
+\section*{Key Findings}
+
+\begin{enumerate}
+\item Alpha learns proximity-adaptive behavior when the CBF constraint activates frequently.
+\item Phi stays flat when alpha is available as a competing safety knob (joint training).
+\item Fixed alpha forces phi to learn --- removing alpha from the action space makes phi the only safety lever.
+\item Higher collision penalty (-250 vs -100) creates more phi activity.
+\item Decoupled architecture (frozen nav or A*) gives the cleanest alpha/phi signal --- the navigation layer cannot absorb the safety gradient.
+\item The robot avoids rather than slows down in open environments --- environment geometry determines whether the CBF is stressed.
+\item SHIELD SDF provides a theoretically grounded single-constraint CBF where phi's effect naturally aligns with the projected covariance from Theorem 2.
+\end{enumerate}
+
+\end{document}
