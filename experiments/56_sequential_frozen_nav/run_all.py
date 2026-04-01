@@ -3,6 +3,7 @@ import subprocess, sys, time
 SCRIPTS = [
     ("Phase 1: Navigation", [sys.executable, "train_phase1_nav.py"]),
     ("Phase 2: Safety Filter", [sys.executable, "train_phase2_safety.py"]),
+    ("Evaluate", [sys.executable, "evaluate_randomized.py"]),
 ]
 if __name__ == "__main__":
     total_start = time.time()
