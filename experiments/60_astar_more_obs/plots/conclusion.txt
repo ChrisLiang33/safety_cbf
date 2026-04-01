@@ -1,0 +1,28 @@
+Experiment 60: A* + 5 Obstacles
+=================================
+NOT YET RUN
+
+Based on: Exp 57 with 5 obstacles instead of 3
+
+Changes from Exp 57:
+--------------------
+1. 5 obstacles across 5 x-bands instead of 3
+   x-bands: [15-35, 40-60, 65-90, 95-115, 120-140]
+2. Observation space expanded: 5 obs x 3 + target x 3 + vel x 2 = 20
+3. More obstacle encounters per episode = more training signal
+
+Setup:
+------
+- Action: [alpha, phi] — kx, ky from A*
+- SHIELD SDF CBF, collision -250
+- 5 obstacles, y=[-10,10]
+- Everything else same as exp 57
+
+Comparisons:
+------------
+- vs Exp 57: 3 obstacles vs 5 obstacles
+  More encounters should strengthen alpha/phi learning
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

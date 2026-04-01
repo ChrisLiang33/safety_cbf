@@ -1,0 +1,32 @@
+Experiment 59: A* + Tight Obstacles
+=====================================
+NOT YET RUN
+
+Based on: Exp 57 with tighter obstacle placement and reduced A* inflation
+
+Changes from Exp 57:
+--------------------
+1. Obstacle y-range: [-4, 4] instead of [-10, 10]
+   Obstacles placed near the direct path center line
+2. A* inflation margin: 0.5m instead of 1.0m
+   A* plans paths closer to obstacles
+
+Both changes force more near-obstacle encounters:
+  - Tighter y-range means obstacles block the direct path more often
+  - Less inflation means A* routes closer to obstacle surfaces
+
+Setup:
+------
+- Action: [alpha, phi] — kx, ky from A*
+- SHIELD SDF CBF, collision -250
+- 3 obstacles, y=[-4,4], inflation=0.5m
+- Everything else same as exp 57
+
+Comparisons:
+------------
+- vs Exp 57: same but obstacles y=[-10,10] and inflation=1.0m
+  Exp 59 should show more CBF activation and stronger alpha/phi signal
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

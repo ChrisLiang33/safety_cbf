@@ -1,0 +1,47 @@
+Experiment 58: Easy Nav (Frozen) → Hard Safety Filter
+======================================================
+NOT YET RUN
+
+Based on: Exp 56 with key improvement — Phase 1 trains with NO obstacles
+
+Motivation:
+-----------
+Exp 56 trained nav on the same map as safety, so the frozen nav policy
+still had some obstacle avoidance behavior. This experiment trains Phase 1
+with NO obstacles at all — the nav policy learns ONLY to beeline toward
+the target. When frozen and placed on a hard map, it will drive straight
+at obstacles, giving alpha/phi maximum training signal.
+
+Phase 2 also uses tighter obstacle placement (y: [-6,6] instead of [-10,10])
+so obstacles are closer to the direct path.
+
+Architecture:
+-------------
+Phase 1: NavEasyEnv
+  - Action: [kx, ky]
+  - NO obstacles — obstacles placed at (500, 500) effectively invisible
+  - 5M steps (less needed for simple task)
+
+Phase 2: SafetyHardEnv
+  - Action: [alpha, phi]
+  - kx, ky from frozen Phase 1 model (beelines to target)
+  - SHIELD SDF CBF, collision -250
+  - Obstacles at y=[-6, 6] — closer to direct path
+  - 10M steps
+
+Comparisons:
+------------
+- vs Exp 56: same architecture but nav trained WITH obstacles
+  Exp 58 should show more CBF activation and stronger alpha/phi signal
+- vs Exp 57: A* nav vs dumb-beeline nav on hard map
+  Different navigation strategies, same safety training setup
+
+What we hope to find:
+---------------------
+1. CBF activates much more frequently than exp 56
+2. Stronger, cleaner alpha/phi proximity-adaptive behavior
+3. The frozen beeline nav creates unavoidable close encounters
+
+Results:
+--------
+[TO FILL AFTER TRAINING]
