@@ -1,0 +1,57 @@
+Experiment 57: A* Navigation → Train Alpha/Phi
+================================================
+NOT YET RUN
+
+Motivation:
+-----------
+Same problem as Exp 56: joint training starves alpha/phi of signal.
+This experiment replaces the learned navigator entirely with A* path
+planning — a classical algorithm, no learning, no gradients.
+
+Mirrors SHIELD paper architecture:
+  SHIELD: A* → safety filter → RL locomotion → robot
+  Ours:   A* → learned adaptive CBF (alpha, phi) → robot
+
+Why A* may be better than frozen learned nav:
+  - A* gives optimal shortest paths — WILL route through tight spaces
+  - Learned navigator may still give obstacles wide berth (habit from training)
+  - A* is deterministic — no noise from a learned policy
+  - Clean experimental isolation: if alpha/phi don't learn, it's not navigation's fault
+
+A* Implementation:
+------------------
+- Discretize env into 1m occupancy grid
+- Inflate obstacles by estimated_radius + 1m margin
+- Standard A* with 8-connected neighbors
+- Proportional waypoint following (K=4.0, threshold=3.0m)
+- Replan every 50 steps
+
+Setup:
+------
+- Action: [alpha, phi] only — kx, ky from A*
+- SHIELD SDF CBF (Eq 19-22), single constraint
+- Collision -250
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Max speed: 6 m/s, target at x=150, 800 max steps
+- 10M steps, 16 envs
+
+What we hope to find:
+---------------------
+1. Strong alpha/phi training signal because A* routes through tight spaces
+2. Alpha/phi adapt to proximity consistently
+3. Compare to Exp 56: if A* produces better results, learned nav still
+   avoids obstacles too aggressively. If similar, the sequential structure
+   is the key insight.
+
+Potential concerns:
+-------------------
+- A* replanning every 50 steps on a 170x44 grid adds CPU overhead per step.
+  May reduce FPS significantly. If too slow, increase grid resolution or
+  replan less frequently.
+- The inflation margin (est_radius + 1m) means A* won't route extremely
+  close to obstacles. May need tuning.
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

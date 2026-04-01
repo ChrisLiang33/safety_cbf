@@ -1,0 +1,53 @@
+Experiment 56: Sequential — Frozen Nav → Train Alpha/Phi
+=========================================================
+NOT YET RUN
+
+Motivation:
+-----------
+Joint training of [kx, ky, alpha, phi] fails because kx/ky dominate
+the gradient signal. The robot learns to navigate so well that the CBF
+never activates, starving alpha/phi of signal.
+
+Solution: train sequentially.
+  Phase 1: Train kx/ky only (no CBF). Robot learns to navigate.
+  Phase 2: FREEZE kx/ky. Train alpha/phi only with SHIELD SDF CBF.
+
+With navigation frozen, the robot WILL be brought near obstacles by
+the nav layer. It cannot learn to avoid — that behavior is locked in.
+Alpha/phi are forced to activate and receive consistent gradient signal.
+
+Architecture:
+-------------
+Phase 1: NavOnlyEnv
+  - Action: [kx, ky]
+  - No CBF, no QP
+  - Same env geometry (6 m/s, target x=150)
+  - 10M steps
+
+Phase 2: SafetyFilterEnv
+  - Action: [alpha, phi]
+  - kx, ky from frozen Phase 1 model (model.predict, deterministic)
+  - SHIELD SDF CBF (Eq 19-22), single constraint
+  - Collision -250
+  - 10M steps
+
+Setup:
+------
+- SHIELD SDF: lambda=1.0, gamma=0.5
+- Sensor error: systematic bias U(-0.6, 0.4) + jitter U(-0.2, 0.2)
+- Dynamics bias: U(0.3, 1.0), obstacle radius: U(3.0, 7.0)
+- Max speed: 6 m/s, target at x=150, 800 max steps
+
+What we hope to find:
+---------------------
+1. Alpha/phi get consistent training signal (CBF activates frequently)
+2. Alpha adapts: high in open space, low near obstacles
+3. Phi shows proximity-adaptive behavior
+4. Better alpha/phi learning than any joint-training experiment
+
+Note: FPS may be lower because Phase 2 calls model.predict() on the
+frozen nav policy every step (extra inference overhead per env step).
+
+Results:
+--------
+[TO FILL AFTER TRAINING]
