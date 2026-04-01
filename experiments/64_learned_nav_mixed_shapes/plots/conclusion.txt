@@ -1,0 +1,36 @@
+Experiment 64: Learned Nav + Mixed Obstacle Shapes (Two-Policy)
+================================================================
+NOT YET RUN
+
+Motivation:
+-----------
+Two-policy sequential architecture with mixed obstacle shapes.
+Tests whether learned navigation + learned safety filter can handle
+non-circular obstacles (rectangles, walls).
+
+Architecture:
+-------------
+Phase 1: NavMixedShapesEnv
+  - Action: [kx, ky], no CBF
+  - Mixed shapes: circles, rectangles, line segments
+  - No sensor error (clean for nav training)
+  - 10M steps
+
+Nav Success Check: 500 episodes, 70% threshold
+
+Phase 2: SafetyMixedShapesEnv
+  - Action: [alpha, phi]
+  - Frozen nav from Phase 1
+  - SHIELD SDF CBF with general shape SDFs
+  - Sensor error + dynamics bias
+  - Collision -250
+  - 10M steps
+
+Comparisons:
+------------
+- vs Exp 63: stochastic A* vs learned nav with mixed shapes
+- vs Exp 56/58: circles only vs mixed shapes with two-policy
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

@@ -1,0 +1,40 @@
+Experiment 62: Learned Nav + Moving Obstacles (Two-Policy)
+===========================================================
+NOT YET RUN
+
+Motivation:
+-----------
+Two-policy sequential architecture with moving obstacles.
+Phase 1: Learn to navigate with moving obstacles (kx, ky only, no CBF)
+Phase 2: Freeze nav, train safety filter (alpha, phi) with SHIELD SDF
+
+Moving obstacles add a new dimension of uncertainty that static
+environments don't test. The frozen nav policy will sometimes drive
+toward obstacles that have moved into its path, forcing the CBF
+to intervene.
+
+Architecture:
+-------------
+Phase 1: NavMovingObsEnv
+  - Action: [kx, ky], no CBF
+  - Moving obstacles (0.3-1.0 m/s, bounce off boundaries)
+  - No sensor error (clean perception for nav training)
+  - 10M steps
+
+Nav Success Check: 500 episodes, 70% threshold
+
+Phase 2: SafetyMovingObsEnv
+  - Action: [alpha, phi]
+  - Frozen nav policy from Phase 1
+  - SHIELD SDF CBF, collision -250
+  - Sensor error: systematic bias + jitter
+  - 10M steps
+
+Comparisons:
+------------
+- vs Exp 61: A* vs learned nav with moving obstacles
+- vs Exp 56/58: static vs moving obstacles with two-policy architecture
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

@@ -1,7 +1,8 @@
-"""Run all: Phase 1 (easy nav) then Phase 2 (hard safety) then evaluate."""
+"""Run all: Phase 1 (easy nav) -> eval nav success -> Phase 2 (hard safety) -> evaluate."""
 import subprocess, sys, time
 SCRIPTS = [
     ("Phase 1: Easy Nav", [sys.executable, "train_phase1_nav.py"]),
+    ("Nav Success Check", [sys.executable, "eval_nav_success.py", "--episodes", "500", "--threshold", "0.7"]),
     ("Phase 2: Hard Safety", [sys.executable, "train_phase2_safety.py"]),
     ("Evaluate", [sys.executable, "evaluate_randomized.py"]),
 ]
@@ -17,6 +18,8 @@ if __name__ == "__main__":
         results.append((name, step_elapsed, status))
         print(f"\n>> {name}: {status} ({step_elapsed:.1f}s / {step_elapsed/60:.1f}min)")
         if ret.returncode != 0:
+            if name == "Nav Success Check":
+                print("\n!! Navigation policy failed success check. Aborting pipeline. !!")
             break
     total_elapsed = time.time() - total_start
     print(f"\n{'='*60}\n  ALL DONE -- {total_elapsed:.1f}s ({total_elapsed/60:.1f}min)\n{'='*60}")

@@ -1,0 +1,38 @@
+Experiment 63: Stochastic A* + Mixed Obstacle Shapes
+======================================================
+NOT YET RUN
+
+Motivation:
+-----------
+All previous experiments used circular obstacles only. Real environments
+have walls, boxes, irregular shapes. This experiment tests whether the
+general SDF formulation works with mixed shapes.
+
+Also, A* is now stochastic — waypoints are perturbed by random noise
+(+/- 2m) to give alpha/phi more varied training signal.
+
+Obstacle shapes:
+----------------
+- Circle: sdf = ||p - center|| - radius
+- Rectangle: sdf = distance to nearest edge of axis-aligned box
+- Line segment (wall): sdf = distance to nearest point on segment - thickness
+- 4 obstacles per episode, shape randomly chosen per obstacle
+
+A* stochastic:
+--------------
+- A* computes optimal path, then each waypoint is perturbed by U(-2, 2)m
+- Same path won't repeat even in identical layouts
+- Forces policy to handle varied approach angles near obstacles
+
+Setup:
+------
+- Action: [alpha, phi] — kx, ky from stochastic A*
+- SHIELD SDF CBF, collision -250
+- 4 mixed-shape obstacles
+- Sensor error: systematic bias + jitter
+- Dynamics bias: U(0.3, 1.0)
+- 10M steps, 16 envs
+
+Results:
+--------
+[TO FILL AFTER TRAINING]

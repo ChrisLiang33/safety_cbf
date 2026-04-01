@@ -1,10 +1,9 @@
-"""Run all: Phase 1 (nav) -> eval nav success -> Phase 2 (safety filter) -> evaluate."""
+"""Run all: Phase 1 (nav) -> nav success check -> Phase 2 (safety)."""
 import subprocess, sys, time
 SCRIPTS = [
-    ("Phase 1: Navigation", [sys.executable, "train_phase1_nav.py"]),
+    ("Phase 1: Nav Mixed Shapes", [sys.executable, "train_phase1_nav.py"]),
     ("Nav Success Check", [sys.executable, "eval_nav_success.py", "--episodes", "500", "--threshold", "0.7"]),
-    ("Phase 2: Safety Filter", [sys.executable, "train_phase2_safety.py"]),
-    ("Evaluate", [sys.executable, "evaluate_randomized.py"]),
+    ("Phase 2: Safety Mixed Shapes", [sys.executable, "train_phase2_safety.py"]),
 ]
 if __name__ == "__main__":
     total_start = time.time()

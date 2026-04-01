@@ -1,0 +1,37 @@
+Experiment 61: A* Navigation + Moving Obstacles
+=================================================
+NOT YET RUN
+
+Motivation:
+-----------
+All previous experiments used static obstacles. Real-world obstacles
+move (pedestrians, other robots, etc). Moving obstacles test whether
+alpha/phi can handle a dynamic environment where the CBF must
+continuously adapt.
+
+Key changes from Exp 57:
+------------------------
+- Obstacles have constant velocity: U(0.3, 1.0) m/s, random direction
+- Velocity sampled once per episode, constant throughout
+- Obstacles bounce off y-boundaries to stay in play
+- A* replans every 10 steps (was 50) to track moving obstacles
+
+Setup:
+------
+- Action: [alpha, phi] — kx, ky from A*
+- SHIELD SDF CBF, collision -250
+- 3 moving obstacles
+- Everything else same as exp 57
+
+What we hope to find:
+---------------------
+1. Alpha/phi respond not just to proximity but to obstacle dynamics
+2. The CBF activates more frequently since obstacles can move into
+   the robot's path unexpectedly
+3. Stronger training signal for phi since static avoidance isn't enough
+
+Note: FPS may be lower due to frequent A* replanning (every 10 steps).
+
+Results:
+--------
+[TO FILL AFTER TRAINING]
