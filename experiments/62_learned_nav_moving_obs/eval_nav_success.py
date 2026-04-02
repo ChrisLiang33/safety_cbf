@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 from stable_baselines3 import PPO
 
-NAV_MODEL_PATH = "./models_dynamic/nav_moving_model"
+NAV_MODEL_PATH = "./models_dynamic/nav_moving_model_v2"
 
 
 def run_eval(model_path, env_cls, n_episodes=500, seed=0):

@@ -30,7 +30,7 @@ def sdf_line(p, a, b, thickness):
 
 
 class NavMixedShapesEnv(gym.Env):
-    def __init__(self, bias_magnitude_range=(0.3, 1.0)):
+    def __init__(self, bias_magnitude_range=(0.0, 0.0)):
         super().__init__()
         self.dt = 0.1
         self.bias_magnitude_range = bias_magnitude_range

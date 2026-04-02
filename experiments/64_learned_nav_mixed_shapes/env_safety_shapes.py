@@ -53,7 +53,7 @@ def sdf_gradient_line(p, a, b):
 
 
 class SafetyMixedShapesEnv(gym.Env):
-    def __init__(self, nav_model_path="./models_dynamic/nav_shapes_model",
+    def __init__(self, nav_model_path="./models_dynamic/nav_shapes_model_v2",
                  systematic_bias_range=(-0.6, 0.4), jitter_range=(-0.2, 0.2),
                  bias_magnitude_range=(0.3, 1.0)):
         super().__init__()

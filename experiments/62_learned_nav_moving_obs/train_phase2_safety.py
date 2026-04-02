@@ -12,7 +12,7 @@ if __name__ == "__main__":
     print("  Frozen nav policy, SHIELD SDF CBF, collision -250")
     print(f"  {TOTAL_TIMESTEPS/1e6:.0f}M timesteps, {N_ENVS} envs")
     env_fns = [lambda: SafetyMovingObsEnv(
-        nav_model_path="./models_dynamic/nav_moving_model"
+        nav_model_path="./models_dynamic/nav_moving_model_v2"
     ) for _ in range(N_ENVS)]
     vec_env = SubprocVecEnv(env_fns)
     model = PPO("MlpPolicy", vec_env, verbose=1, device="cuda", n_steps=4096)

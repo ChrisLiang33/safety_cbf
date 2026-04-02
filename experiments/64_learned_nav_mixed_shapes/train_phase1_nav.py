@@ -18,6 +18,6 @@ if __name__ == "__main__":
     start = time.time()
     model.learn(total_timesteps=TOTAL_TIMESTEPS)
     elapsed = time.time() - start
-    model.save("./models_dynamic/nav_shapes_model")
+    model.save("./models_dynamic/nav_shapes_model_v2")
     vec_env.close()
     print(f"\n>> Phase 1 (nav shapes): {elapsed:.1f}s ({elapsed/60:.1f}min)")
