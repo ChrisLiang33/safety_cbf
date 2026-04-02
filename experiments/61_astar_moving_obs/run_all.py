@@ -2,6 +2,7 @@
 import subprocess, sys, time
 SCRIPTS = [
     ("Train", [sys.executable, "train_dynamic.py"]),
+    ("Evaluate", [sys.executable, "evaluate_randomized.py"]),
 ]
 if __name__ == "__main__":
     total_start = time.time()
