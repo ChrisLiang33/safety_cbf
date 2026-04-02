@@ -1,0 +1,7 @@
+Motivation: Exp 63 showed alpha/phi staying flat because A* routes cleanly around static mixed shapes. Tighter obstacle spacing (5 obstacles, y in [-6,6]) forces narrow gaps where the CBF must engage.
+
+Setup: A* navigation, 5 mixed-shape obstacles in tighter bands, y-range [-6,6]. Alpha/phi only. SHIELD SDF. Stochastic A* with waypoint noise.
+
+Results: [pending]
+
+Takeaways: [pending]

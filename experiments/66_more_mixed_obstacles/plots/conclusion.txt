@@ -1,0 +1,7 @@
+Motivation: Exp 63 showed alpha/phi flat -- A* routes cleanly around 4 static mixed shapes. More obstacles (8) makes it harder to find a clean path, forcing more CBF engagement.
+
+Setup: A* navigation, 8 mixed-shape obstacles across the field. Alpha/phi only. SHIELD SDF. Stochastic A* with waypoint noise.
+
+Results: [pending]
+
+Takeaways: [pending]

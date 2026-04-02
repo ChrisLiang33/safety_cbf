@@ -1,0 +1,7 @@
+Motivation: Exp 61 (moving circular obstacles) showed reactive alpha/phi. Exp 63 (static mixed shapes) showed flat alpha/phi. Combining both — moving obstacles with mixed shapes — tests whether movement is the key ingredient for learning, regardless of shape.
+
+Setup: A* navigation, 4 moving mixed-shape obstacles (0.3-1.0 m/s). Replan every 10 steps. Alpha/phi only. SHIELD SDF. Stochastic A* with waypoint noise.
+
+Results: [pending]
+
+Takeaways: [pending]

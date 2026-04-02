@@ -1,0 +1,7 @@
+Motivation: Exp 63 showed alpha/phi flat because A* routes perfectly around static shapes. Making the planner worse (replan every 200 steps instead of 50, waypoint noise 5m instead of 2m) means the robot follows imperfect paths, creating more near-obstacle encounters for the CBF.
+
+Setup: A* navigation with degraded planner (replan interval 200, waypoint noise 5m). 4 mixed-shape obstacles. Alpha/phi only. SHIELD SDF.
+
+Results: [pending]
+
+Takeaways: [pending]
