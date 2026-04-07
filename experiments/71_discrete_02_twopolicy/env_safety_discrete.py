@@ -1,8 +1,11 @@
 """
-Exp 62 Phase 2: Safety filter with moving obstacles.
+Exp 71 Phase 2: Safety filter with frozen nav and DISCRETE alpha/phi.
 Frozen navigation policy provides kx, ky.
-Agent controls [alpha, phi] ONLY.
+Agent controls discrete alpha/phi adjustments (up/stay/down).
 Obstacles move with constant velocity.
+
+Action space: Discrete(9) -- 3 alpha x 3 phi (down/stay/up)
+ALPHA_STEP = 0.2, PHI_STEP = 0.2
 
 SHIELD SDF pipeline (Eq 19-22) with single constraint.
 """
@@ -16,8 +19,12 @@ LAMBDA_H = 1.0
 GAMMA_H = 0.5
 OBS_SPEED_RANGE = (0.3, 1.0)
 
-class SafetyMovingObsEnv(gym.Env):
-    def __init__(self, nav_model_path="./models_dynamic/nav_moving_model_v2",
+ALPHA_STEP = 0.2
+PHI_STEP = 0.2
+
+
+class SafetyDiscreteMovingObsEnv(gym.Env):
+    def __init__(self, nav_model_path="./models_dynamic/nav_moving_discrete_model_v2",
                  systematic_bias_range=(-0.6, 0.4), jitter_range=(-0.2, 0.2),
                  bias_magnitude_range=(0.3, 1.0), obs_radius_range=(3.0, 7.0)):
         super().__init__()
@@ -36,16 +43,19 @@ class SafetyMovingObsEnv(gym.Env):
 
         self.nav_model = PPO.load(nav_model_path)
 
-        self.action_space = spaces.Box(
-            low=np.array([0.1, 0.01], dtype=np.float32),
-            high=np.array([5.0, 10.0], dtype=np.float32),
-            dtype=np.float32,
-        )
+        # Persistent alpha/phi state
+        self.alpha = 2.5
+        self.phi = 1.0
+
+        # Discrete action space: 3 alpha choices x 3 phi choices = 9
+        self.action_space = spaces.Discrete(9)
+
+        # Observation: 14 base + alpha + phi = 16
         self.observation_space = spaces.Box(
             low=np.array([-180, -35, 0, -180, -35, 0, -180, -35, 0,
-                          -180, -35, 0.1, -7, -7], dtype=np.float32),
+                          -180, -35, 0.1, -7, -7, 0.1, 0.01], dtype=np.float32),
             high=np.array([180, 35, 10, 180, 35, 10, 180, 35, 10,
-                           180, 35, 5.0, 7, 7], dtype=np.float32),
+                           180, 35, 5.0, 7, 7, 5.0, 10.0], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -116,6 +126,17 @@ class SafetyMovingObsEnv(gym.Env):
 
         return h_val, Lgh, closest_idx, e_i_current
 
+    def _get_nav_obs(self):
+        """Get the 14-dim observation for the frozen nav model."""
+        parts = []
+        for i in range(3):
+            rel = self.obs_pos[i] - self.robot_pos
+            parts.extend([rel[0], rel[1], self.estimated_radius[i]])
+        rel_t = self.target_pos - self.robot_pos
+        parts.extend([rel_t[0], rel_t[1], self.target_radius])
+        parts.extend([self.velocity[0], self.velocity[1]])
+        return np.array(parts, dtype=np.float32)
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.robot_pos = np.array([0.0, 0.0])
@@ -123,6 +144,10 @@ class SafetyMovingObsEnv(gym.Env):
         self.current_step = 0
         self.prev_e_i = np.array([1.0, 0.0])
         self.prev_closest_idx = 0
+
+        # Reset persistent alpha/phi
+        self.alpha = 2.5
+        self.phi = 1.0
 
         target_y = self.np_random.uniform(-5.0, 5.0)
         self.target_pos = np.array([150.0, target_y])
@@ -165,23 +190,33 @@ class SafetyMovingObsEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action):
-        alpha, phi = float(action[0]), float(action[1])
+        action = int(action)
         self.current_step += 1
+
+        # Decode discrete action
+        alpha_action = action // 3   # 0=down, 1=stay, 2=up
+        phi_action = action % 3
+        alpha_delta = (alpha_action - 1) * ALPHA_STEP
+        phi_delta = (phi_action - 1) * PHI_STEP
+        self.alpha = np.clip(self.alpha + alpha_delta, 0.1, 5.0)
+        self.phi = np.clip(self.phi + phi_delta, 0.01, 10.0)
 
         self._move_obstacles()
 
-        obs = self._get_obs()
-        nav_action, _ = self.nav_model.predict(obs, deterministic=True)
+        # Get nav command from frozen model
+        nav_obs = self._get_nav_obs()
+        nav_action, _ = self.nav_model.predict(nav_obs, deterministic=True)
         kx, ky = float(nav_action[0]), float(nav_action[1])
         k_nom = np.clip(np.array([kx, ky]), -6.0, 6.0)
 
+        # SHIELD SDF CBF
         h_val, Lgh, closest_idx, e_i_current = self._compute_shield_h(self.robot_pos)
 
         self._k_nom_param.value = k_nom
         self._L_g_h.value = Lgh
         Lgh_norm_sq = np.sum(Lgh**2)
         h_safe = max(h_val, 1e-4)
-        self._rhs.value = -alpha * h_val + (Lgh_norm_sq * phi) / h_safe
+        self._rhs.value = -self.alpha * h_val + (Lgh_norm_sq * self.phi) / h_safe
 
         try:
             self._prob.solve(solver=cp.OSQP, verbose=False, warm_start=True)
@@ -222,7 +257,8 @@ class SafetyMovingObsEnv(gym.Env):
         return self._get_obs(), float(reward), bool(terminated), bool(truncated), {
             "safe_u": safe_u, "k_nom": k_nom, "dist2obs_true": dist2obs_true,
             "min_obs_dist_true": float(min_obs_dist_true),
-            "alpha": float(alpha), "phi": float(phi),
+            "alpha_action": int(alpha_action), "phi_action": int(phi_action),
+            "alpha": float(self.alpha), "phi": float(self.phi),
             "h_val": float(h_val),
             "true_radius": list(self.true_radius),
             "estimated_radius": list(self.estimated_radius),
@@ -238,4 +274,6 @@ class SafetyMovingObsEnv(gym.Env):
         rel_t = self.target_pos - self.robot_pos
         parts.extend([rel_t[0], rel_t[1], self.target_radius])
         parts.extend([self.velocity[0], self.velocity[1]])
+        # Append current alpha and phi
+        parts.extend([self.alpha, self.phi])
         return np.array(parts, dtype=np.float32)

@@ -1,0 +1,7 @@
+Motivation: Continuous alpha/phi may converge to bland averages. Discrete up/down/stay actions simplify the learning problem and create naturally smooth temporal behavior. Step size 0.2 provides fine-grained control (~25 steps to traverse alpha's full range).
+
+Setup: A* navigation, 3 moving circular obstacles. Discrete action space (9 actions: 3 alpha x 3 phi). Step size 0.2 for both. SHIELD SDF. Alpha init=2.5, phi init=1.0.
+
+Results: [pending]
+
+Takeaways: [pending]

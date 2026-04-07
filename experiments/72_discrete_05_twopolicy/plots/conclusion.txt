@@ -1,0 +1,7 @@
+Motivation: Compare with exp 71 (step=0.2). Larger step 0.5 means ~10 steps for full alpha range -- faster but coarser reactions. Two-policy with learned nav.
+
+Setup: Phase 1: learned nav, moving obs, no disturbance, 10M steps. Phase 2: frozen nav, discrete alpha/phi (step=0.5), SHIELD SDF, full disturbance, 10M steps. 3 moving circular obstacles.
+
+Results: [pending]
+
+Takeaways: [pending]

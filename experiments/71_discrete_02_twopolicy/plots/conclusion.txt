@@ -1,0 +1,7 @@
+Motivation: Discrete alpha/phi (up/down/stay) simplifies learning vs continuous. Two-policy: Phase 1 learns clean nav (no disturbance), Phase 2 learns discrete safety filter (with disturbance). Step=0.2 for fine control.
+
+Setup: Phase 1: learned nav, moving obs, no disturbance, 10M steps. Phase 2: frozen nav, discrete alpha/phi (step=0.2), SHIELD SDF, full disturbance, 10M steps. 3 moving circular obstacles.
+
+Results: [pending]
+
+Takeaways: [pending]

@@ -1,0 +1,7 @@
+Motivation: Compare with exp 69 (step=0.2). Larger step (0.5) means ~10 steps to traverse alpha's full range -- faster reactions but coarser control. Tests whether coarser granularity is sufficient.
+
+Setup: A* navigation, 3 moving circular obstacles. Discrete action space (9 actions). Step size 0.5. SHIELD SDF. Alpha init=2.5, phi init=1.0.
+
+Results: [pending]
+
+Takeaways: [pending]
