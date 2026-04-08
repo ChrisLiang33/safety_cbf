@@ -1,0 +1,7 @@
+Motivation: Joint alpha/phi learning leads to alpha dominating and phi staying flat. Sequential curriculum: learn phi first with alpha fixed at 2.0, forcing phi to handle uncertainty. Then freeze phi and learn alpha on top. This ensures phi learns the 'safety bubble' pattern before alpha can override it.
+
+Setup: Phase 1: phi-only discrete (3 actions, step=0.5), alpha fixed=2.0. Phase 2: alpha-only discrete (3 actions, step=0.5), phi frozen from Phase 1. Degraded A* (replan=30, inflate=0). 3 moving circular obstacles. Full disturbance.
+
+Results: [pending]
+
+Takeaways: [pending]

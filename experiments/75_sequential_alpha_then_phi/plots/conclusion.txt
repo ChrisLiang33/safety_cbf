@@ -1,0 +1,7 @@
+Motivation: Compare with exp 74 (phi-first). Here alpha learns first with phi fixed at 0.5, then phi fine-tunes on top. Risk: alpha may learn to do everything alone, leaving nothing for phi. This tests whether the learning order matters.
+
+Setup: Phase 1: alpha-only discrete (3 actions, step=0.5), phi fixed=0.5. Phase 2: phi-only discrete (3 actions, step=0.5), alpha frozen from Phase 1. Degraded A* (replan=30, inflate=0). 3 moving circular obstacles. Full disturbance.
+
+Results: [pending]
+
+Takeaways: [pending]

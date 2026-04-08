@@ -1,13 +1,11 @@
 """
-Exp 72 Phase 1: Navigation with moving obstacles.
-Agent controls [kx, ky]. No CBF.
-Obstacles move with constant velocity, bounce off y-boundaries.
+Exp 72 Phase 1: Navigation with STATIC obstacles.
+Agent controls [kx, ky]. No CBF, no disturbance, no obstacle movement.
+Phase 2 will introduce movement + disturbance for the safety filter.
 """
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-
-OBS_SPEED_RANGE = (0.3, 1.0)
 
 
 class NavMovingObsEnv(gym.Env):
@@ -19,7 +17,6 @@ class NavMovingObsEnv(gym.Env):
         self.true_radius = [5.0, 5.0, 5.0]
         self.estimated_radius = [5.0, 5.0, 5.0]
         self.bias = np.zeros(2)
-        self.obs_vel = [np.zeros(2) for _ in range(3)]
 
         self.action_space = spaces.Box(
             low=np.array([-6.0, -6.0], dtype=np.float32),
@@ -52,17 +49,6 @@ class NavMovingObsEnv(gym.Env):
             placed.append(np.array([x, y]))
         return placed
 
-    def _move_obstacles(self):
-        for i in range(3):
-            self.obs_pos[i] += self.obs_vel[i] * self.dt
-            if self.obs_pos[i][1] > 18.0:
-                self.obs_pos[i][1] = 18.0
-                self.obs_vel[i][1] *= -1
-            elif self.obs_pos[i][1] < -18.0:
-                self.obs_pos[i][1] = -18.0
-                self.obs_vel[i][1] *= -1
-            self.obs_pos[i][0] = np.clip(self.obs_pos[i][0], 5.0, 155.0)
-
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.robot_pos = np.array([0.0, 0.0])
@@ -80,17 +66,7 @@ class NavMovingObsEnv(gym.Env):
                 self.obs_radius_range[0], self.obs_radius_range[1])
             self.estimated_radius[i] = self.true_radius[i]  # no sensor error for nav training
 
-        bias_mag = self.np_random.uniform(
-            self.bias_magnitude_range[0], self.bias_magnitude_range[1])
-        angle = self.np_random.uniform(0, 2 * np.pi)
-        self.bias = bias_mag * np.array([np.cos(angle), np.sin(angle)])
-
-        # Sample obstacle velocities
-        self.obs_vel = []
-        for _ in range(3):
-            speed = self.np_random.uniform(*OBS_SPEED_RANGE)
-            ang = self.np_random.uniform(0, 2 * np.pi)
-            self.obs_vel.append(speed * np.array([np.cos(ang), np.sin(ang)]))
+        self.bias = np.zeros(2)  # no disturbance
 
         self.prev_dist2target = np.linalg.norm(self.robot_pos - self.target_pos)
         return self._get_obs(), {}
@@ -100,9 +76,9 @@ class NavMovingObsEnv(gym.Env):
         u = np.clip(np.array([kx, ky]), -6.0, 6.0)
         self.current_step += 1
 
-        self._move_obstacles()
+        # Static obstacles — no movement in Phase 1
 
-        self.robot_pos += u * self.dt + self.bias * self.dt
+        self.robot_pos += u * self.dt
         self.velocity = u.copy()
 
         dist2obs_true = [np.linalg.norm(self.robot_pos - self.obs_pos[i]) - self.true_radius[i] for i in range(3)]

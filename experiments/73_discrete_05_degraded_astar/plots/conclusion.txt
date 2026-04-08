@@ -1,0 +1,9 @@
+Motivation: Exp 69 showed discrete alpha/phi just maxing alpha — A* was too good (replans every 10 steps with 1m inflation margin). Degrading A* (replan every 30 steps, zero inflation) means the planner gives direction but not safety. Stale paths + close obstacle cuts force the CBF to actually intervene. Step=0.5 for visible reactions.
+
+Target behavior: alpha drops + phi rises near obstacles (safety bubble), then reverts after passing.
+
+Setup: A* navigation with REPLAN_INTERVAL=30, INFLATION_MARGIN=0.0. 3 moving circular obstacles (0.3-1.0 m/s). Discrete action space (9 actions: 3 alpha x 3 phi, step=0.5). SHIELD SDF. Full disturbance (bias 0.3-1.0, sensor bias + jitter). Alpha init=2.5, phi init=1.0.
+
+Results: [pending]
+
+Takeaways: [pending]
